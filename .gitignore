@@ -1,0 +1,19 @@
+# Runtime state files (created/modified during shell usage)
+idle-settings.json
+recent-apps.json
+wallpaper-state.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary and backup files
+*.tmp
+*.bak
+*~
+.DS_Store
+
+# Editor directories
+.idea/
+.vscode/

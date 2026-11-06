@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# qs-ctl: Helper script to control Quickshell via IPC
+
+set -euo pipefail
+
+QS_BIN="$(command -v qs 2>/dev/null || command -v quickshell 2>/dev/null || echo "qs")"
+
+usage() {
+    cat << 'EOF'
+Usage: qs-ctl <command> [subcommand] [arguments...]
+
+Quickshell IPC controller helper.
+
+Commands:
+  menu, appmenu [toggle|open|close]
+      Toggle or control the Application Menu launcher (default: toggle)
+
+  switcher [toggle|open|close|preview|refresh|status]
+      Toggle or control the Window/Workspace switcher (default: toggle)
+
+  calendar [toggle|open|close]
+      Toggle or control the calendar card (default: toggle)
+
+  clock [open|close|activity|status]
+      Control the idle/lock clock card
+
+  wallpaper [toggle|next|prev|random|set <path>|rescan|status]
+      Control wallpaper and wallpaper selector (default: toggle)
+
+  hotcorner [toggle|enable|disable|status|trigger <corner>]
+      Manage edge hot corners (corners: top_left, top_right, bottom_left, bottom_right)
+
+  polkit [status|cancel]
+      Query or cancel polkit dialog
+
+  start
+      Launch quickshell in the background
+
+  stop
+      Stop running quickshell instances
+
+  restart
+      Restart quickshell
+
+  status
+      Check if quickshell is running and show general status
+
+EOF
+}
+
+cmd="${1:-}"
+
+case "$cmd" in
+    menu|appmenu)
+        action="${2:-toggle}"
+        case "$action" in
+            toggle) "$QS_BIN" ipc call appmenu toggle ;;
+            open)   "$QS_BIN" ipc call appmenu open ;;
+            close)  "$QS_BIN" ipc call appmenu close ;;
+            *) echo "Unknown appmenu action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    switcher)
+        action="${2:-toggle}"
+        case "$action" in
+            toggle)  "$QS_BIN" ipc call switcher toggle ;;
+            open)    "$QS_BIN" ipc call switcher open ;;
+            close)   "$QS_BIN" ipc call switcher close ;;
+            preview) "$QS_BIN" ipc call switcher togglePreview ;;
+            refresh) "$QS_BIN" ipc call switcher refresh ;;
+            status)  "$QS_BIN" ipc call switcher status ;;
+            *) echo "Unknown switcher action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    calendar)
+        action="${2:-toggle}"
+        case "$action" in
+            toggle) "$QS_BIN" ipc call calendar toggle ;;
+            open)   "$QS_BIN" ipc call calendar open ;;
+            close)  "$QS_BIN" ipc call calendar close ;;
+            *) echo "Unknown calendar action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    clock)
+        action="${2:-open}"
+        case "$action" in
+            open)     "$QS_BIN" ipc call clock open ;;
+            close)    "$QS_BIN" ipc call clock close ;;
+            activity) "$QS_BIN" ipc call clock activity ;;
+            status)   "$QS_BIN" ipc call clock isOpen ;;
+            *) echo "Unknown clock action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    wallpaper)
+        action="${2:-toggle}"
+        case "$action" in
+            toggle) "$QS_BIN" ipc call wallpaper toggle ;;
+            open)   "$QS_BIN" ipc call wallpaper open ;;
+            close)  "$QS_BIN" ipc call wallpaper close ;;
+            next)   "$QS_BIN" ipc call wallpaper next ;;
+            prev)   "$QS_BIN" ipc call wallpaper prev ;;
+            random) "$QS_BIN" ipc call wallpaper random ;;
+            set)
+                shift 2
+                target="${1:-}"
+                if [ -z "$target" ]; then
+                    echo "Error: wallpaper set requires an image path." >&2
+                    exit 1
+                fi
+                "$QS_BIN" ipc call wallpaper set "$target"
+                ;;
+            rescan) "$QS_BIN" ipc call wallpaper rescan ;;
+            status) "$QS_BIN" ipc call wallpaper status ;;
+            *) echo "Unknown wallpaper action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    hotcorner)
+        action="${2:-toggle}"
+        case "$action" in
+            toggle)  "$QS_BIN" ipc call hotcorner toggle ;;
+            enable)  "$QS_BIN" ipc call hotcorner enable ;;
+            disable) "$QS_BIN" ipc call hotcorner disable ;;
+            status)  "$QS_BIN" ipc call hotcorner status ;;
+            trigger)
+                shift 2
+                corner="${1:-}"
+                if [ -z "$corner" ]; then
+                    echo "Error: hotcorner trigger requires a corner name (top_left, top_right, bottom_left, bottom_right)" >&2
+                    exit 1
+                fi
+                "$QS_BIN" ipc call hotcorner trigger "$corner"
+                ;;
+            set-compositor)
+                shift 2
+                comp="${1:-auto}"
+                "$QS_BIN" ipc call hotcorner setCompositor "$comp"
+                ;;
+            *) echo "Unknown hotcorner action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    polkit)
+        action="${2:-status}"
+        case "$action" in
+            status) "$QS_BIN" ipc call polkit status ;;
+            cancel) "$QS_BIN" ipc call polkit cancel ;;
+            *) echo "Unknown polkit action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    start)
+        if pgrep -x quickshell >/dev/null 2>&1; then
+            echo "Quickshell is already running (PID: $(pgrep -x quickshell | tr '\n' ' '))"
+            exit 0
+        fi
+        echo "Starting quickshell..."
+        nohup quickshell >/dev/null 2>&1 &
+        sleep 0.5
+        if pgrep -x quickshell >/dev/null 2>&1; then
+            echo "Quickshell started successfully."
+        else
+            echo "Warning: quickshell did not start or exited immediately." >&2
+            exit 1
+        fi
+        ;;
+
+    stop)
+        echo "Stopping quickshell..."
+        killall -q quickshell || true
+        echo "Stopped."
+        ;;
+
+    restart)
+        "$0" stop
+        sleep 0.5
+        "$0" start
+        ;;
+
+    status)
+        if pgrep -x quickshell >/dev/null 2>&1; then
+            echo "Quickshell is running (PID: $(pgrep -x quickshell | tr '\n' ' '))"
+        else
+            echo "Quickshell is not running."
+        fi
+        ;;
+
+    -h|--help|help|"")
+        usage
+        ;;
+
+    *)
+        echo "Error: Unknown command '$cmd'" >&2
+        usage
+        exit 1
+        ;;
+esac

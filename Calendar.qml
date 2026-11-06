@@ -1,0 +1,280 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Wayland
+
+PanelWindow {
+    id: root
+
+    required property var service
+
+    screen: Quickshell.screens[0]
+    visible: true
+    color: "transparent"
+
+    anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
+    }
+
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.namespace: "quickshell-calendar"
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+
+    property var monthDate: {
+        var now = new Date()
+        return new Date(now.getFullYear(), now.getMonth(), 1)
+    }
+    property var selectedDate: new Date()
+    property var days: []
+    readonly property string monthTitle: Qt.formatDate(monthDate, "MMMM yyyy")
+    readonly property string selectedDateLabel: Qt.formatDate(selectedDate, "dddd, d MMMM yyyy")
+
+    function sameDay(a, b) {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+    }
+
+    function rebuildDays() {
+        var first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
+        var mondayOffset = (first.getDay() + 6) % 7
+        var gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - mondayOffset)
+        var today = new Date()
+        var values = []
+
+        for (var i = 0; i < 42; i++) {
+            var date = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i)
+            values.push({
+                date: date,
+                day: date.getDate(),
+                inMonth: date.getMonth() === monthDate.getMonth(),
+                isToday: sameDay(date, today),
+                isSelected: sameDay(date, selectedDate)
+            })
+        }
+        days = values
+    }
+
+    function shiftMonth(amount) {
+        monthDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + amount, 1)
+    }
+
+    function selectDate(day) {
+        selectedDate = day.date
+        if (!day.inMonth) monthDate = new Date(day.date.getFullYear(), day.date.getMonth(), 1)
+        else rebuildDays()
+    }
+
+    function closeCalendar() {
+        service.calendarOpen = false
+    }
+
+    onMonthDateChanged: rebuildDays()
+
+    Item {
+        id: keyCatcher
+        anchors.fill: parent
+        focus: true
+
+        Keys.onEscapePressed: root.closeCalendar()
+        Keys.onLeftPressed: root.shiftMonth(-1)
+        Keys.onRightPressed: root.shiftMonth(1)
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#99080c16"
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.closeCalendar()
+            }
+        }
+
+        Rectangle {
+            id: card
+            width: Math.min(388, root.width - 32)
+            height: calendarColumn.implicitHeight + 36
+            anchors.centerIn: parent
+            radius: 16
+            color: "#111722"
+            border.color: "#3b4a63"
+            border.width: 1
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {}
+            }
+
+            ColumnLayout {
+                id: calendarColumn
+                anchors.fill: parent
+                anchors.margins: 18
+                spacing: 14
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 8
+                        color: previousMouse.containsMouse ? "#273650" : "#1a2230"
+                        border.color: previousMouse.containsMouse ? "#75baff" : "#35445c"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "‹"
+                            color: "#abc7ff"
+                            font.pixelSize: 22
+                        }
+
+                        MouseArea {
+                            id: previousMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.shiftMonth(-1)
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.monthTitle
+                        color: "#e2e8f0"
+                        font.pixelSize: 18
+                        font.bold: true
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Rectangle {
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        radius: 8
+                        color: nextMouse.containsMouse ? "#273650" : "#1a2230"
+                        border.color: nextMouse.containsMouse ? "#75baff" : "#35445c"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "›"
+                            color: "#abc7ff"
+                            font.pixelSize: 22
+                        }
+
+                        MouseArea {
+                            id: nextMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.shiftMonth(1)
+                        }
+                    }
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 7
+                    columnSpacing: 4
+                    rowSpacing: 4
+
+                    Repeater {
+                        model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+                        Text {
+                            required property string modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+                            text: modelData
+                            color: "#8290a7"
+                            font.pixelSize: 10
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Repeater {
+                        model: root.days
+
+                        Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 38
+                            radius: 8
+                            color: modelData.isSelected ? "#3d5e86"
+                                : (modelData.isToday ? "#25364e"
+                                : (dayMouse.containsMouse ? "#202c3e" : "transparent"))
+                            border.color: modelData.isToday ? "#75baff" : "transparent"
+                            border.width: modelData.isToday ? 1 : 0
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.day
+                                color: !modelData.inMonth ? "#526078"
+                                    : (modelData.isSelected ? "#ffffff" : "#dce5f2")
+                                font.pixelSize: 12
+                                font.bold: modelData.isToday || modelData.isSelected
+                            }
+
+                            MouseArea {
+                                id: dayMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.selectDate(modelData)
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.selectedDateLabel
+                        color: "#94a3b8"
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                    }
+
+                    Rectangle {
+                        implicitWidth: 54
+                        implicitHeight: 28
+                        radius: 7
+                        color: todayMouse.containsMouse ? "#273650" : "#1a2230"
+                        border.color: todayMouse.containsMouse ? "#75baff" : "#35445c"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Today"
+                            color: "#abc7ff"
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: todayMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var now = new Date()
+                                root.selectedDate = now
+                                root.monthDate = new Date(now.getFullYear(), now.getMonth(), 1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        rebuildDays()
+        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    }
+}
