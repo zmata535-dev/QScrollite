@@ -7,6 +7,15 @@ ShellRoot {
 
     property var wallpaperService: service
 
+    function ensureHypridleForQuickShellIdleCallbacks() {
+        var signature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE");
+        var desktop = (Quickshell.env("XDG_CURRENT_DESKTOP") || "").toString().toLowerCase();
+        if ((!signature || signature === "") && desktop.indexOf("hyprland") === -1) return;
+        Quickshell.execDetached(["bash", "-c", "pgrep -x hypridle >/dev/null || exec hypridle"]);
+    }
+
+    Component.onCompleted: ensureHypridleForQuickShellIdleCallbacks()
+
     WallpaperService {
         id: service
     }
@@ -43,12 +52,8 @@ ShellRoot {
         }
     }
 
-    LazyLoader {
-        active: switcherService.appMenuOpen
-
-        AppMenu {
-            service: switcherService
-        }
+    AppMenu {
+        service: switcherService
     }
 
     LazyLoader {
@@ -68,6 +73,14 @@ ShellRoot {
     }
 
     LazyLoader {
+        active: switcherService.compactClockOpen
+
+        CompactClock {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
         active: switcherService.idleConfigOpen
 
         IdleSettings {
@@ -78,6 +91,13 @@ ShellRoot {
     HotCornerService {
         id: hotCornerService
         switcherService: switcherService
+    }
+
+    Variants {
+        model: Quickshell.screens
+        CompactClockEdge {
+            service: switcherService
+        }
     }
 
     Variants {
@@ -263,12 +283,28 @@ ShellRoot {
             return switcherService.clockOpen;
         }
 
+        function compact(): void {
+            switcherService.showCompactClock();
+        }
+
+        function compactIsOpen(): bool {
+            return switcherService.compactClockOpen;
+        }
+
         function activity(): string {
             return switcherService.closeClockOnActivity();
         }
 
         function close(): void {
-            switcherService.clockOpen = false;
+            switcherService.requestClockClose();
+        }
+    }
+
+    IpcHandler {
+        target: "idle-settings"
+
+        function isOpen(): bool {
+            return switcherService.idleConfigOpen;
         }
     }
 

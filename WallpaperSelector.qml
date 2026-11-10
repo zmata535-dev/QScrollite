@@ -89,6 +89,8 @@ PanelWindow {
         }
     }
 
+    GlowBorder { targetItem: modalBox; cornerRadius: modalBox.radius; spread: 5 }
+
     // Modal Dialog Box
     Rectangle {
         id: modalBox
@@ -97,7 +99,7 @@ PanelWindow {
         height: Math.min(parent.height - 60, 680)
         color: "#141622"
         radius: 18
-        border.color: "#282c40"
+        border.color: "#3b4a63"
         border.width: 1
 
         // Consume clicks inside modal
@@ -115,18 +117,14 @@ PanelWindow {
                 Layout.fillWidth: true
                 spacing: 12
 
-                Text {
-                    text: "󰸉"
-                    font.family: "MesloLGS Nerd Font"
-                    font.pixelSize: 22
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰸉"
+font.pixelSize: 22
                     color: "#abc7ff"
                 }
 
-                Text {
-                    text: "Wallpaper Manager"
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Wallpaper Manager"
                     font.pixelSize: 18
-                    font.bold: true
-                    color: "#f0f2fa"
+color: "#f0f2fa"
                 }
 
                 Rectangle {
@@ -135,8 +133,7 @@ PanelWindow {
                     implicitWidth: countLabel.implicitWidth + 16
                     implicitHeight: 24
 
-                    Text {
-                        id: countLabel
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: countLabel
                         anchors.centerIn: parent
                         text: service.wallpapers.length + " wallpapers"
                         color: "#8990b3"
@@ -150,18 +147,15 @@ PanelWindow {
                 Rectangle {
                     implicitWidth: 32
                     implicitHeight: 32
-                    radius: 8
-                    color: closeMouse.containsMouse ? "#3b2630" : "#202436"
-                    border.color: closeMouse.containsMouse ? "#ffb4ab" : "#2e344a"
+                    radius: 6
+                    color: closeMouse.containsMouse ? "#3b1e28" : "#161d2a"
+                    border.color: closeMouse.containsMouse ? "#ff6b81" : "#2b364a"
                     border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "✕"
-                        color: closeMouse.containsMouse ? "#ffb4ab" : "#8990b3"
-                        font.pixelSize: 13
-                        font.bold: true
-                    }
+                        color: closeMouse.containsMouse ? "#ffb3ba" : "#8092ab"
+                        font.pixelSize: 13}
 
                     MouseArea {
                         id: closeMouse
@@ -182,9 +176,9 @@ PanelWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 38
-                    color: "#1b1e2c"
-                    radius: 10
-                    border.color: searchInput.activeFocus ? "#abc7ff" : "#282d40"
+                    color: "#161d2a"
+                    radius: 6
+                    border.color: searchInput.activeFocus ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
                     RowLayout {
@@ -193,17 +187,14 @@ PanelWindow {
                         anchors.rightMargin: 10
                         spacing: 8
 
-                        Text {
-                            text: "󰍉"
-                            font.family: "MesloLGS Nerd Font"
-                            font.pixelSize: 14
-                            color: "#6c7293"
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰍉"
+font.pixelSize: 14
+                            color: "#8092ab"
                         }
 
-                        TextInput {
-                            id: searchInput
+                        TextInput { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: searchInput
                             Layout.fillWidth: true
-                            color: "#f0f2fa"
+                            color: "#dce5f2"
                             font.pixelSize: 13
                             clip: true
                             selectByMouse: true
@@ -211,22 +202,33 @@ PanelWindow {
                                 selectorWindow.searchQuery = text;
                             }
 
-                            Text {
-                                text: "Filter wallpapers..."
-                                color: "#545a78"
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Filter wallpapers..."
+                                color: "#8092ab"
                                 font.pixelSize: 13
                                 visible: !searchInput.text && !searchInput.activeFocus
                             }
                         }
 
                         // Clear search button
-                        Text {
+                        Rectangle {
                             visible: searchInput.text.length > 0
-                            text: "✕"
-                            color: "#7e85a6"
-                            font.pixelSize: 12
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            radius: 6
+                            color: clearSearchMouse.containsMouse ? "#273650" : "#161d2a"
+                            border.color: clearSearchMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                            border.width: 1
+
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
+                                text: "✕"
+                                color: clearSearchMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                                font.pixelSize: 11
+                            }
+
                             MouseArea {
+                                id: clearSearchMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: searchInput.text = ""
                             }
@@ -238,16 +240,16 @@ PanelWindow {
                 Rectangle {
                     implicitWidth: 74
                     implicitHeight: 38
-                    radius: 10
-                    color: prevMouse.containsMouse ? "#2a3048" : "#1f2334"
-                    border.color: "#2e344a"
+                    radius: 6
+                    color: prevMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: prevMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 6
-                        Text { text: "◀"; font.pixelSize: 10; color: "#abc7ff" }
-                        Text { text: "Prev"; font.pixelSize: 12; font.bold: true; color: "#e2e6f3" }
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "◀"; font.pixelSize: 10; color: prevMouse.containsMouse ? "#abc7ff" : "#8092ab" }
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Prev"; font.pixelSize: 12; color: prevMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
                     }
                     MouseArea {
                         id: prevMouse
@@ -262,16 +264,16 @@ PanelWindow {
                 Rectangle {
                     implicitWidth: 74
                     implicitHeight: 38
-                    radius: 10
-                    color: nextMouse.containsMouse ? "#2a3048" : "#1f2334"
-                    border.color: "#2e344a"
+                    radius: 6
+                    color: nextMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: nextMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 6
-                        Text { text: "Next"; font.pixelSize: 12; font.bold: true; color: "#e2e6f3" }
-                        Text { text: "▶"; font.pixelSize: 10; color: "#abc7ff" }
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Next"; font.pixelSize: 12; color: nextMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "▶"; font.pixelSize: 10; color: nextMouse.containsMouse ? "#abc7ff" : "#8092ab" }
                     }
                     MouseArea {
                         id: nextMouse
@@ -286,21 +288,19 @@ PanelWindow {
                 Rectangle {
                     implicitWidth: 96
                     implicitHeight: 38
-                    radius: 10
-                    color: randMouse.containsMouse ? "#2a3048" : "#1f2334"
-                    border.color: "#2e344a"
+                    radius: 6
+                    color: randMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: randMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 6
-                        Text {
-                            text: "󰒝"
-                            font.family: "MesloLGS Nerd Font"
-                            font.pixelSize: 14
-                            color: "#abc7ff"
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰒝"
+font.pixelSize: 14
+                            color: randMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         }
-                        Text { text: "Random"; font.pixelSize: 12; font.bold: true; color: "#e2e6f3" }
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Random"; font.pixelSize: 12; color: randMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
                     }
                     MouseArea {
                         id: randMouse
@@ -315,25 +315,21 @@ PanelWindow {
                 Rectangle {
                     implicitWidth: 125
                     implicitHeight: 38
-                    radius: 10
-                    color: timerMouse.containsMouse ? "#2a3048" : (service.slideshowInterval > 0 ? "#0d2b45" : "#1f2334")
-                    border.color: service.slideshowInterval > 0 ? "#abc7ff" : "#2e344a"
+                    radius: 6
+                    color: timerMouse.containsMouse ? "#273650" : (service.slideshowInterval > 0 ? "#22334f" : "#161d2a")
+                    border.color: timerMouse.containsMouse ? "#abc7ff" : (service.slideshowInterval > 0 ? "#5476a4" : "#2b364a")
                     border.width: 1
 
                     RowLayout {
                         anchors.centerIn: parent
                         spacing: 6
-                        Text {
-                            text: "󰥔"
-                            font.family: "MesloLGS Nerd Font"
-                            font.pixelSize: 13
-                            color: service.slideshowInterval > 0 ? "#abc7ff" : "#8990b3"
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰥔"
+font.pixelSize: 13
+                            color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         }
-                        Text {
-                            text: "Timer: " + service.intervalLabel
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Timer: " + service.intervalLabel
                             font.pixelSize: 12
-                            font.bold: true
-                            color: service.slideshowInterval > 0 ? "#abc7ff" : "#c5cbe0"
+color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "#dce5f2"
                         }
                     }
                     MouseArea {
@@ -349,17 +345,15 @@ PanelWindow {
                 Rectangle {
                     implicitWidth: 40
                     implicitHeight: 38
-                    radius: 10
-                    color: scanMouse.containsMouse ? "#2a3048" : "#1f2334"
-                    border.color: "#2e344a"
+                    radius: 6
+                    color: scanMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: scanMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "󰑐"
-                        font.family: "MesloLGS Nerd Font"
-                        font.pixelSize: 14
-                        color: "#abc7ff"
+font.pixelSize: 14
+                        color: scanMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         rotation: service.isScanning ? 360 : 0
                         Behavior on rotation {
                             NumberAnimation { duration: 500 }
@@ -402,7 +396,7 @@ PanelWindow {
                             anchors.fill: parent
                             radius: 12
                             color: "#181b29"
-                            border.color: cardItem.isActive ? "#abc7ff" : (cardMouse.containsMouse ? "#4e577d" : "#262b3d")
+                            border.color: cardItem.isActive || cardMouse.containsMouse ? "#abc7ff" : "#2b364a"
                             border.width: cardItem.isActive ? 2 : 1
 
                             scale: cardMouse.containsMouse ? 1.02 : 1.0
@@ -435,8 +429,7 @@ PanelWindow {
                                         GradientStop { position: 1.0; color: "#ee0c0f18" }
                                     }
 
-                                    Text {
-                                        anchors.bottom: parent.bottom
+                                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.bottom: parent.bottom
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         anchors.margins: 8
@@ -460,13 +453,11 @@ PanelWindow {
                                     implicitWidth: activeLabel.implicitWidth + 12
                                     implicitHeight: 20
 
-                                    Text {
-                                        id: activeLabel
+                                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: activeLabel
                                         anchors.centerIn: parent
                                         text: "✓ ACTIVE"
                                         font.pixelSize: 9
-                                        font.bold: true
-                                        color: "#abc7ff"
+color: "#abc7ff"
                                     }
                                 }
                             }
@@ -496,16 +487,13 @@ PanelWindow {
                             anchors.centerIn: parent
                             spacing: 10
 
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
                                 text: "󰍉"
-                                font.family: "MesloLGS Nerd Font"
-                                font.pixelSize: 32
+font.pixelSize: 32
                                 color: "#545a78"
                             }
 
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
                                 text: "No wallpapers found matching \"" + selectorWindow.searchQuery + "\""
                                 color: "#8990b3"
                                 font.pixelSize: 13
@@ -520,11 +508,9 @@ PanelWindow {
                 Layout.fillWidth: true
                 spacing: 14
 
-                Text {
-                    text: "Active: " + (service.currentWallpaper ? service.currentWallpaper.split('/').pop() : "None")
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Active: " + (service.currentWallpaper ? service.currentWallpaper.split('/').pop() : "None")
                     color: "#abc7ff"
                     font.pixelSize: 12
-                    font.bold: true
                     elide: Text.ElideMiddle
                     Layout.maximumWidth: 350
                 }
@@ -536,8 +522,7 @@ PanelWindow {
                     color: "#434966"
                 }
 
-                Text {
-                    text: service.slideshowInterval > 0
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: service.slideshowInterval > 0
                         ? "Slideshow active (every " + service.intervalLabel + ")"
                         : "Slideshow paused"
                     color: "#8990b3"
@@ -546,8 +531,7 @@ PanelWindow {
 
                 Item { Layout.fillWidth: true }
 
-                Text {
-                    text: "[Esc] Close  •  [← / →] Prev/Next  •  [R] Random  •  [F5] Rescan"
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "[Esc] Close  •  [← / →] Prev/Next  •  [R] Random  •  [F5] Rescan"
                     color: "#5e668c"
                     font.pixelSize: 11
                 }

@@ -12,7 +12,7 @@ PanelWindow {
 
     required property var service
     screen: Quickshell.screens[0]
-    visible: true
+    visible: service.appMenuOpen
     color: "transparent"
 
     anchors {
@@ -24,12 +24,39 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-app-menu"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     property string filterText: ""
+    property bool showAllApps: false
     property int appRevision: 0
     property int selectedIndex: 0
     property var calculation: Calculator.evaluate(filterText)
+    property real cardEntranceOffset: -36
+    property real cardEntranceOpacity: 0
+
+    ParallelAnimation {
+        id: entranceAnimation
+        running: true
+
+        NumberAnimation {
+            target: root
+            property: "cardEntranceOffset"
+            from: -36
+            to: 0
+            duration: 240
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: root
+            property: "cardEntranceOpacity"
+            from: 0
+            to: 1
+            duration: 180
+            easing.type: Easing.OutCubic
+        }
+    }
+
     FileView {
         id: recentAppsFile
         path: (Quickshell.env("HOME") || "") + "/.config/quickshell/recent-apps.json"
@@ -43,9 +70,11 @@ PanelWindow {
 
     property var matches: {
         appRevision
+        service.pinnedApps
+        showAllApps
         var values = (typeof DesktopEntries !== "undefined" && DesktopEntries.applications && DesktopEntries.applications.values)
             ? DesktopEntries.applications.values : []
-        return AppSearch.sortedEntries(values, filterText, function(entry) { return entry.noDisplay === true }, recentAppsStore.recentApps)
+        return AppSearch.sortedEntries(values, filterText, function(entry) { return entry.noDisplay === true }, recentAppsStore.recentApps, service.pinnedApps, showAllApps)
     }
     property var menuRows: {
         var rows = []
@@ -57,15 +86,37 @@ PanelWindow {
     function iconSource(icon) {
         var value = String(icon || "")
         if (!value) return Quickshell.iconPath("application-x-executable", true)
+        // Some desktop-entry sources report the window class instead of the
+        // installed icon name for Sakura.
+        if (value.toLowerCase() === "sakura") value = "terminal-tango"
         if (value.indexOf("file://") === 0 || value.indexOf("image://") === 0) return value
         if (value.charAt(0) === "/") return "file://" + value
         return Quickshell.iconPath(value, true) || Quickshell.iconPath("application-x-executable", true)
     }
 
     function closeMenu() {
+        searchField.focus = false
         filterText = ""
         selectedIndex = 0
         service.appMenuOpen = false
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            entranceAnimation.restart()
+            Qt.callLater(function() {
+                if (root.visible) searchField.forceActiveFocus()
+            })
+        } else {
+            searchField.focus = false
+        }
+    }
+
+    function runCommand() {
+        var command = filterText.trim()
+        if (!command) return
+        Quickshell.execDetached(["bash", "-lc", command])
+        closeMenu()
     }
 
     function shellQuote(value) {
@@ -129,6 +180,12 @@ PanelWindow {
             }
         }
 
+        GlowBorder {
+            targetItem: card
+            cornerRadius: card.radius
+            offsetY: root.cardEntranceOffset
+        }
+
         Rectangle {
             id: card
             width: Math.min(520, root.width - 32)
@@ -138,6 +195,8 @@ PanelWindow {
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
+            opacity: root.cardEntranceOpacity
+            transform: Translate { y: root.cardEntranceOffset }
 
             MouseArea {
                 anchors.fill: parent
@@ -152,35 +211,23 @@ PanelWindow {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Text {
-                        text: "Apps"
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Apps"
                         color: "#e2e8f0"
-                        font.pixelSize: 18
-                        font.bold: true
-                    }
+                        font.pixelSize: 18}
                     Item { Layout.fillWidth: true }
-                    Text {
-                        text: "Esc to close"
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Esc to close"
                         color: "#8290a7"
                         font.pixelSize: 11
                     }
                 }
 
-                TextField {
+                ShellTextField {
                     id: searchField
                     Layout.fillWidth: true
                     placeholderText: "Search, calculate (2 + 2), or convert (10 km to mi)…"
                     text: root.filterText
-                    color: "#e2e8f0"
-                    placeholderTextColor: "#718096"
                     selectByMouse: true
                     onTextEdited: root.filterText = text
-                    background: Rectangle {
-                        radius: 8
-                        color: "#1a2230"
-                        border.color: searchField.activeFocus ? "#75baff" : "#35445c"
-                        border.width: 1
-                    }
                     Keys.onPressed: function(event) {
                         if (event.key === Qt.Key_Escape) {
                             if (root.filterText.length) root.filterText = ""
@@ -202,6 +249,24 @@ PanelWindow {
                             if (root.menuRows.length) root.activate(root.menuRows[root.selectedIndex])
                             event.accepted = true
                         }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    ShellButton {
+                        Layout.fillWidth: true
+                        text: root.showAllApps ? "Show pinned/recent" : "Show all"
+                        onClicked: root.showAllApps = !root.showAllApps
+                    }
+
+                    ShellButton {
+                        text: "Run"
+                        accent: true
+                        enabled: root.filterText.trim().length > 0
+                        onClicked: root.runCommand()
                     }
                 }
 
@@ -244,16 +309,13 @@ PanelWindow {
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 2
-                                Text {
-                                    Layout.fillWidth: true
+                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                                     text: modelData.isCalculation ? "Copy result" : AppSearch.entryName(modelData.app.entry)
                                     color: index === root.selectedIndex ? "#abc7ff" : "#e2e8f0"
                                     font.pixelSize: 14
-                                    font.weight: Font.Medium
                                     elide: Text.ElideRight
                                 }
-                                Text {
-                                    Layout.fillWidth: true
+                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                                     text: modelData.isCalculation ? modelData.calculation.value : AppSearch.entrySubtext(modelData.app.entry)
                                     visible: text.length > 0
                                     color: "#8998af"
@@ -261,8 +323,7 @@ PanelWindow {
                                     elide: Text.ElideRight
                                 }
                             }
-                            Text {
-                                text: "↵"
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "↵"
                                 color: "#8290a7"
                                 font.pixelSize: 13
                             }
@@ -280,10 +341,11 @@ PanelWindow {
                     ScrollBar.vertical: ScrollBar { }
                 }
 
-                Text {
-                    Layout.fillWidth: true
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                     visible: root.menuRows.length === 0
-                    text: "No applications found"
+                    text: root.filterText.trim().length
+                        ? "No applications found"
+                        : "No pinned or recent apps. Search to find an application."
                     color: "#8998af"
                     horizontalAlignment: Text.AlignHCenter
                     font.pixelSize: 13
@@ -292,5 +354,7 @@ PanelWindow {
         }
     }
 
-    Component.onCompleted: Qt.callLater(function() { searchField.forceActiveFocus() })
+    Component.onCompleted: {
+        if (visible) Qt.callLater(function() { searchField.forceActiveFocus() })
+    }
 }

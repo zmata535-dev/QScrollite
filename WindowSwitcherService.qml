@@ -7,20 +7,36 @@ QtObject {
 
     property var wallpaperService: null
     property bool open: false
+    property bool appSwitcherHovered: false
+    property bool appSwitcherClosePending: false
     property bool appMenuOpen: false
     property bool appMenuPending: false
     property bool calendarOpen: false
     property bool calendarPending: false
     property bool clockOpen: false
+    property bool compactClockOpen: false
+    property bool compactClockPending: false
+    property bool compactClockClosing: false
+    property bool compactClockCloseToCenter: false
+    property bool clockCloseRequested: false
+    property bool clockSlideCloseRequested: false
     property bool idleConfigOpen: false
-    property bool ignoreClockActivity: false
     property string idleApplyStatus: ""
     property alias idleClockTimeout: idleSettings.clockTimeout
+    property alias compactClockTimeout: idleSettings.compactClockTimeout
     property alias idleDimTimeout: idleSettings.dimTimeout
     property alias idleDisplayOffTimeout: idleSettings.displayOffTimeout
     property alias idleLockTimeout: idleSettings.lockTimeout
     property alias idleClockTextColor: idleSettings.clockTextColor
     property alias idleClockTextSize: idleSettings.clockTextSize
+    property alias compactClockTextSize: idleSettings.compactClockTextSize
+    property alias clockCardBackgroundOpacity: idleSettings.clockCardBackgroundOpacity
+    property alias clockShatterAnimationEnabled: idleSettings.clockShatterAnimationEnabled
+    property alias clockSlideAnimationEnabled: idleSettings.clockSlideAnimationEnabled
+    property alias pinnedApps: pinnedAppsStore.pinnedApps
+    property alias columnWidthSmall: idleSettings.columnWidthSmall
+    property alias columnWidthMedium: idleSettings.columnWidthMedium
+    property alias columnWidthLarge: idleSettings.columnWidthLarge
     property bool previewOnHover: false
     property var workspaces: []
     property var hoveredWindow: null
@@ -43,11 +59,31 @@ QtObject {
         JsonAdapter {
             id: idleSettings
             property int clockTimeout: 9
+            property int compactClockTimeout: 3
             property int dimTimeout: 15
             property int displayOffTimeout: 21
             property int lockTimeout: 26
             property string clockTextColor: "#e2e8f0"
             property int clockTextSize: 96
+            property int compactClockTextSize: 36
+            property int clockCardBackgroundOpacity: 100
+            property bool clockShatterAnimationEnabled: true
+            property bool clockSlideAnimationEnabled: false
+            property int columnWidthSmall: 50
+            property int columnWidthMedium: 69
+            property int columnWidthLarge: 92
+        }
+    }
+
+    property var pinnedAppsFile: FileView {
+        id: pinnedAppsFile
+        path: (Quickshell.env("HOME") || "") + "/.config/quickshell/pinned-apps.json"
+        onAdapterUpdated: writeAdapter()
+        onSaveFailed: function(error) { console.warn("[AppPins] Save failed:", error) }
+
+        JsonAdapter {
+            id: pinnedAppsStore
+            property list<string> pinnedApps: []
         }
     }
 
@@ -92,6 +128,13 @@ QtObject {
     function resolveAppIcon(appId, title) {
         if (!appId) appId = "";
         appId = appId.toString().trim();
+
+        // The Sakura window class is not itself an installed icon name on
+        // this system; the sakura.desktop entry uses terminal-tango.
+        if (appId.toLowerCase().indexOf("sakura") !== -1) {
+            var sakuraIcon = Quickshell.iconPath("terminal-tango");
+            if (sakuraIcon && sakuraIcon.length > 0) return sakuraIcon;
+        }
 
         // 1. Try DesktopEntries.heuristicLookup
         try {
@@ -321,14 +364,21 @@ QtObject {
         open = true;
     }
 
-    function closeSwitcher() {
+    function closeSwitcher(force) {
+        if (open && appSwitcherHovered && force !== true) {
+            appSwitcherClosePending = true;
+            return false;
+        }
         open = false;
+        appSwitcherClosePending = false;
+        appSwitcherHovered = false;
         hoveredWindow = null;
+        return true;
     }
 
     function toggle() {
         if (open) {
-            closeSwitcher();
+            closeSwitcher(true);
         } else {
             openSwitcher();
         }
@@ -342,7 +392,7 @@ QtObject {
         } else {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + win.id + "\" })"]);
         }
-        closeSwitcher();
+        closeSwitcher(true);
     }
 
     function closeWindow(win) {
@@ -353,6 +403,77 @@ QtObject {
             Quickshell.execDetached(["niri", "msg", "action", "close-window", "--id", id]);
         } else {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.window.close({ window = \"address:" + id + "\" })"]);
+        }
+    }
+
+    function setWindowColumnWidth(win, percent) {
+        if (!win || win.id === undefined || win.id === null) return;
+        var id = String(win.id);
+        var value = Math.max(10, Math.min(100, Number(percent)));
+        if (activeCompositor === "niri") {
+            // Niri's column-width action applies to the focused window.
+            Quickshell.execDetached(["bash", "-c", "niri msg action focus-window --id \"$1\" && niri msg action set-column-width \"$2%\"", "qs-column-width", id, String(value)]);
+        } else {
+            // Hyprland's scrolling layout resizes the currently focused column
+            // through colresize; this does not change focus or move the pointer.
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.layout(\"colresize " + String(value / 100) + "\")"]);
+        }
+    }
+
+    function toggleWindowFullscreen(win) {
+        if (!win || win.id === undefined || win.id === null) return;
+        var id = String(win.id);
+        if (activeCompositor === "niri") {
+            Quickshell.execDetached(["bash", "-c", "niri msg action focus-window --id \"$1\" && niri msg action fullscreen-window", "qs-fullscreen", id]);
+        } else {
+            var escapedId = id.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.window.fullscreen({ window = \"address:" + escapedId + "\", action = \"toggle\" })"]);
+        }
+    }
+
+    function launchAppForWindow(win) {
+        if (!win) return;
+        var entry = null;
+        try { entry = DesktopEntries.heuristicLookup(win.appId || win.title || ""); } catch (e) {}
+        if (!entry || !entry.id) return;
+        var id = String(entry.id);
+        if (!id.endsWith(".desktop")) id += ".desktop";
+        Quickshell.execDetached(["gtk-launch", id]);
+    }
+
+    function appEntryForWindow(win) {
+        if (!win) return null;
+        try { return DesktopEntries.heuristicLookup(win.appId || win.title || ""); } catch (e) { return null; }
+    }
+
+    function isWindowAppPinned(win) {
+        var entry = appEntryForWindow(win);
+        if (!entry || !entry.id) return false;
+        var appId = String(entry.id);
+        if (!appId.endsWith(".desktop")) appId += ".desktop";
+        return pinnedApps.indexOf(appId) >= 0;
+    }
+
+    function toggleWindowAppPinned(win) {
+        var entry = appEntryForWindow(win);
+        if (!entry || !entry.id) return;
+        var appId = String(entry.id);
+        if (!appId.endsWith(".desktop")) appId += ".desktop";
+        var updated = pinnedApps.slice(0);
+        var index = updated.indexOf(appId);
+        if (index >= 0) updated.splice(index, 1);
+        else updated.push(appId);
+        pinnedApps = updated;
+    }
+
+    function closeAppWindows(win) {
+        if (!win || !win.appId) return;
+        var appId = String(win.appId).toLowerCase();
+        for (var i = 0; i < workspaces.length; i++) {
+            var windows = workspaces[i].windows || [];
+            for (var j = 0; j < windows.length; j++) {
+                if (String(windows[j].appId || "").toLowerCase() === appId) closeWindow(windows[j]);
+            }
         }
     }
 
@@ -369,7 +490,7 @@ QtObject {
         } else {
             Quickshell.execDetached(["hyprctl", "dispatch", "workspace", id]);
         }
-        closeSwitcher();
+        closeSwitcher(true);
     }
 
     function nextWorkspace() {
@@ -378,7 +499,16 @@ QtObject {
         } else {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ workspace = \"+1\" })"]);
         }
-        closeSwitcher();
+        closeSwitcher(true);
+    }
+
+    function reloadHyprlandConfig() {
+        Quickshell.execDetached(["hyprctl", "reload"]);
+    }
+
+    function restartQuickshell() {
+        var home = (Quickshell.env("HOME") || "").toString();
+        Quickshell.execDetached(["bash", home + "/.config/quickshell/bin/qs-ctl", "restart"]);
     }
 
     function runSystemAction(action) {
@@ -398,7 +528,7 @@ QtObject {
             return;
         }
 
-        closeSwitcher();
+        closeSwitcher(true);
         Quickshell.execDetached(command);
     }
 
@@ -416,22 +546,34 @@ QtObject {
         repeat: false
         onTriggered: {
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.open || service.appMenuOpen || service.appMenuPending ||
+            if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending ||
                     service.calendarOpen || service.calendarPending || service.idleConfigOpen ||
                     service.wallpaperToggleTimer.running || wallpaperOpen) {
                 restart();
                 return;
             }
-            service.ignoreClockActivity = true;
+            service.clockCloseRequested = false;
+            service.clockSlideCloseRequested = false;
             service.clockOpen = true;
-            service.clockActivityGuardTimer.restart();
         }
     }
 
-    property var clockActivityGuardTimer: Timer {
-        interval: 1000
+    property var compactClockOpenTimer: Timer {
+        interval: 100
         repeat: false
-        onTriggered: service.ignoreClockActivity = false
+        onTriggered: {
+            if (!service.compactClockPending) return;
+            var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
+            if (service.open || service.appMenuOpen || service.appMenuPending ||
+                    service.calendarOpen || service.calendarPending || service.clockOpen ||
+                    service.clockCloseRequested || service.idleConfigOpen || wallpaperOpen ||
+                    service.wallpaperToggleTimer.running) {
+                restart();
+                return;
+            }
+            service.compactClockPending = false;
+            service.compactClockOpen = true;
+        }
     }
 
     function openCalendar() {
@@ -441,9 +583,12 @@ QtObject {
     }
 
     function openClock() {
+        compactClockOpenTimer.stop();
+        compactClockPending = false;
+        closeCompactClock(true);
+        clockCloseRequested = false;
+        clockSlideCloseRequested = false;
         clockOpen = false;
-        ignoreClockActivity = true;
-        clockActivityGuardTimer.stop();
         clockOpenTimer.stop();
         closeSwitcher();
         appMenuTimer.stop();
@@ -459,14 +604,87 @@ QtObject {
     }
 
     function closeClockOnActivity() {
-        // Opening the overlay can itself produce an immediate idle-resume event.
-        if (clockOpenTimer.running || ignoreClockActivity) return "ignored";
-        clockOpen = false;
+        closeCompactClock();
+
+        // The idle command that requests the full card can itself produce an
+        // immediate resume callback. Let the short transition finish first;
+        // once visible, activity closes the full card below.
+        if (clockOpenTimer.running) {
+            return "opening";
+        }
+
+        requestClockClose();
         return "closed";
+    }
+
+    function showCompactClock() {
+        requestCompactClock();
+    }
+
+    function showCompactClockFromEdge() {
+        requestCompactClock();
+    }
+
+    function requestCompactClock() {
+        closeSwitcher();
+        appMenuTimer.stop();
+        appMenuPending = false;
+        appMenuOpen = false;
+        calendarTimer.stop();
+        calendarPending = false;
+        calendarOpen = false;
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose();
+        idleConfigOpen = false;
+        wallpaperToggleTimer.stop();
+        if (wallpaperService) wallpaperService.closeSelector();
+
+        if (compactClockOpen) {
+            // Do not reverse an activity or pointer-leave dismissal just
+            // because the idle/edge trigger fires again during its animation.
+            return;
+        } else {
+            compactClockPending = true;
+            compactClockOpenTimer.restart();
+        }
+    }
+
+    function closeCompactClock(toCenter) {
+        if (compactClockPending) {
+            compactClockPending = false;
+            compactClockOpenTimer.stop();
+        }
+        if (!compactClockOpen || compactClockClosing) return;
+        compactClockCloseToCenter = toCenter === true;
+        compactClockClosing = true;
+    }
+
+    function finishCompactClockClose() {
+        compactClockClosing = false;
+        compactClockOpen = false;
+        compactClockCloseToCenter = false;
+    }
+
+    function requestClockClose() {
+        if (!clockOpen) return;
+        if (clockShatterAnimationEnabled) {
+            clockCloseRequested = true;
+        } else if (clockSlideAnimationEnabled) {
+            clockSlideCloseRequested = true;
+        } else {
+            clockCloseRequested = false;
+            clockSlideCloseRequested = false;
+            clockOpen = false;
+        }
     }
 
     function openIdleConfig() {
         closeSwitcher();
+        compactClockOpenTimer.stop();
+        compactClockPending = false;
+        closeCompactClock();
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose();
         idleConfigOpen = true;
         idleApplyStatus = "";
     }
@@ -477,12 +695,14 @@ QtObject {
             command: [
                 "python3",
                 (Quickshell.env("HOME") || "") + "/.config/quickshell/apply-idle-settings.py",
+                compactClockTimeout.toString(),
                 idleClockTimeout.toString(),
                 idleDimTimeout.toString(),
                 idleDisplayOffTimeout.toString(),
                 idleLockTimeout.toString(),
                 idleClockTextColor,
-                idleClockTextSize.toString()
+                idleClockTextSize.toString(),
+                compactClockTextSize.toString()
             ]
         });
     }

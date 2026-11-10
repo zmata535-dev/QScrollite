@@ -19,7 +19,8 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    // Keep hot-corner surfaces (Overlay layer) interactive above the full-screen panel.
+    WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-app-switcher"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
@@ -27,6 +28,47 @@ PanelWindow {
 
     property var now: new Date()
     property bool focusedIconScrollPending: true
+    property var contextMenuWindow: null
+    property real contextMenuX: 0
+    property real contextMenuY: 0
+    function showAppContextMenu(win, point) {
+        contextMenuWindow = win;
+        contextMenuX = Math.max(8, Math.min(width - 264, point.x));
+        contextMenuY = Math.max(8, Math.min(height - appContextMenu.height - 8, point.y));
+    }
+
+    function invokeAppContextAction(action, value) {
+        var win = contextMenuWindow;
+        contextMenuWindow = null;
+        if (!win) return;
+
+        if (action === "focus") switcherWindow.service.focusWindow(win);
+        else if (action === "launch") switcherWindow.service.launchAppForWindow(win);
+        else if (action === "close") switcherWindow.service.closeWindow(win);
+        else if (action === "close-all") switcherWindow.service.closeAppWindows(win);
+        else if (action === "toggle-pin") switcherWindow.service.toggleWindowAppPinned(win);
+        else if (action === "fullscreen") switcherWindow.service.toggleWindowFullscreen(win);
+    }
+
+    function focusedAppWindow() {
+        for (var i = 0; i < switcherWindow.service.workspaces.length; i++) {
+            var windows = switcherWindow.service.workspaces[i].windows || [];
+            for (var j = 0; j < windows.length; j++) {
+                if (windows[j].focused) return windows[j];
+            }
+        }
+        return null;
+    }
+
+    function setFocusedColumnWidth(percent) {
+        var win = focusedAppWindow();
+        if (win) switcherWindow.service.setWindowColumnWidth(win, percent);
+    }
+
+    function toggleFocusedFullscreen() {
+        var win = focusedAppWindow();
+        if (win) switcherWindow.service.toggleWindowFullscreen(win);
+    }
 
     function scrollToFocusedIcon(iconItem) {
         if (!focusedIconScrollPending) return
@@ -62,8 +104,7 @@ PanelWindow {
             border.color: nextWorkspaceMouse.containsMouse ? "#abc7ff" : "#2b364a"
             border.width: 1
 
-            Text {
-                anchors.centerIn: parent
+            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                 text: "↓"
                 color: nextWorkspaceMouse.containsMouse ? "#abc7ff" : "#8092ab"
                 font.pixelSize: 15
@@ -83,7 +124,7 @@ PanelWindow {
     MouseArea {
         anchors.fill: parent
         onClicked: {
-            switcherWindow.service.closeSwitcher();
+            switcherWindow.service.closeSwitcher(true);
         }
     }
 
@@ -93,11 +134,13 @@ PanelWindow {
         focus: true
 
         Keys.onEscapePressed: {
-            switcherWindow.service.closeSwitcher();
+            switcherWindow.service.closeSwitcher(true);
         }
     }
 
     // Floating Switcher Bar anchored near top-left
+    GlowBorder { targetItem: container; cornerRadius: container.radius }
+
     Rectangle {
         id: container
         anchors {
@@ -107,19 +150,27 @@ PanelWindow {
             leftMargin: 16
         }
 
-        width: Math.min(switcherWindow.width - 32, Math.max(380, mainCol.implicitWidth + 28))
+        width: Math.min(switcherWindow.width - 32, Math.max(560, mainCol.implicitWidth + 28)) * 0.9
         height: mainCol.implicitHeight + 24
 
         color: "#111622"
         radius: 14
-        border.color: "#283448"
+        border.color: "#3b4a63"
         border.width: 1
 
         // Prevent background clicks through the panel
         MouseArea {
             anchors.fill: parent
-            hoverEnabled: false
+            hoverEnabled: true
             onClicked: {}
+            onEntered: switcherWindow.service.appSwitcherHovered = true
+            onExited: {
+                Qt.callLater(function() {
+                    switcherWindow.service.appSwitcherHovered = false
+                    if (switcherWindow.service.appSwitcherClosePending)
+                        switcherWindow.service.closeSwitcher(true)
+                })
+            }
         }
 
         ColumnLayout {
@@ -148,15 +199,11 @@ PanelWindow {
                         id: clockDisplay
                         spacing: 1
 
-                        Text {
-                            text: Qt.formatDateTime(switcherWindow.now, "HH:mm")
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "HH:mm")
                             color: "#f1f5f9"
-                            font.pixelSize: 20
-                            font.bold: true
-                        }
+                            font.pixelSize: 20}
 
-                        Text {
-                            text: Qt.formatDateTime(switcherWindow.now, "dddd, dd MMM yy")
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "dddd, dd MMM yy")
                             color: "#94a3b8"
                             font.pixelSize: 11
                         }
@@ -180,14 +227,11 @@ PanelWindow {
                     implicitWidth: compText.implicitWidth + 12
                     implicitHeight: 22
 
-                    Text {
-                        id: compText
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: compText
                         anchors.centerIn: parent
                         text: switcherWindow.service.activeCompositor.toUpperCase()
                         color: "#abc7ff"
-                        font.pixelSize: 9
-                        font.bold: true
-                    }
+                        font.pixelSize: 9}
                 }
 
                 // Configure the idle timers and clock card appearance
@@ -199,11 +243,10 @@ PanelWindow {
                     border.color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "◷"
                         color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 15
+                        font.pixelSize: 24
                     }
 
                     MouseArea {
@@ -224,11 +267,10 @@ PanelWindow {
                     border.color: wallpaperMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "▧"
                         color: wallpaperMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 15
+                        font.pixelSize: 18
                     }
 
                     MouseArea {
@@ -240,32 +282,78 @@ PanelWindow {
                     }
                 }
 
-                // Close Button
+                RowLayout {
+                    spacing: 4
+
+                    Repeater {
+                        model: [
+                            { value: switcherWindow.service.columnWidthSmall, name: "Narrow", glyphWidth: 5 },
+                            { value: switcherWindow.service.columnWidthMedium, name: "Normal", glyphWidth: 10 },
+                            { value: switcherWindow.service.columnWidthLarge, name: "Wide", glyphWidth: 15 }
+                        ]
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            implicitWidth: 40
+                            implicitHeight: 24
+                            radius: 6
+                            color: widthButtonMouse.containsMouse ? "#273650" : "#161d2a"
+                            border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                            border.width: 1
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: modelData.glyphWidth
+                                height: 13
+                                radius: 1
+                                color: "transparent"
+                                border.width: 1
+                                border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#a5b4c8"
+                            }
+
+                            MouseArea {
+                                id: widthButtonMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: switcherWindow.setFocusedColumnWidth(modelData.value)
+                            }
+
+                            ToolTip.visible: widthButtonMouse.containsMouse
+                            ToolTip.text: modelData.name + " column width"
+                            ToolTip.delay: 450
+                        }
+                    }
+                }
+
+                // Keep fullscreen immediately after the Wide column button.
                 Rectangle {
                     implicitWidth: 24
                     implicitHeight: 24
                     radius: 6
-                    color: closeMouse.containsMouse ? "#3b1e28" : "#1a202d"
-                    border.color: closeMouse.containsMouse ? "#ff6b81" : "#2b364a"
+                    color: fullscreenFocusedMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "✕"
-                        color: closeMouse.containsMouse ? "#ffb3ba" : "#8092ab"
-                        font.pixelSize: 11
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
+                        text: "⛶"
+                        color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.pixelSize: 21
                     }
 
                     MouseArea {
-                        id: closeMouse
+                        id: fullscreenFocusedMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            switcherWindow.service.closeSwitcher();
-                        }
+                        onClicked: switcherWindow.toggleFocusedFullscreen()
                     }
+
+                    ToolTip.visible: fullscreenFocusedMouse.containsMouse
+                    ToolTip.text: "Toggle fullscreen"
+                    ToolTip.delay: 450
                 }
+
             }
 
             // Divider Line
@@ -313,9 +401,9 @@ PanelWindow {
                         id: appMenuBtn
                         width: 54
                         height: 64
-                        radius: 10
-                        color: appMenuMouse.containsMouse ? "#273650" : "#192233"
-                        border.color: appMenuMouse.containsMouse ? "#abc7ff" : "#384a6b"
+                        radius: 6
+                        color: appMenuMouse.containsMouse ? "#273650" : "#161d2a"
+                        border.color: appMenuMouse.containsMouse ? "#abc7ff" : "#2b364a"
                         border.width: 1
 
                         ColumnLayout {
@@ -341,19 +429,16 @@ PanelWindow {
                                             width: 7
                                             height: 7
                                             radius: 2
-                                            color: appMenuMouse.containsMouse ? "#abc7ff" : "#8ba6d9"
+                                            color: appMenuMouse.containsMouse ? "#abc7ff" : "#8092ab"
                                         }
                                     }
                                 }
                             }
 
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
                                 text: "Apps"
-                                color: appMenuMouse.containsMouse ? "#abc7ff" : "#8ca0be"
-                                font.pixelSize: 9
-                                font.bold: true
-                            }
+                                color: appMenuMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                                font.pixelSize: 9}
                         }
 
                         MouseArea {
@@ -404,13 +489,10 @@ PanelWindow {
                                     border.color: "#2e3e57"
                                     border.width: 1
 
-                                    Text {
-                                        anchors.centerIn: parent
+                                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                                         text: modelData.name || modelData.id
                                         color: "#abc7ff"
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                    }
+                                        font.pixelSize: 10}
                                 }
 
                                 // Open Apps in this workspace (Sorted by layout position)
@@ -457,13 +539,10 @@ PanelWindow {
                                                 color: "#26354c"
                                                 visible: !iconImg.visible
 
-                                                Text {
-                                                    anchors.centerIn: parent
+                                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                                                     text: (modelData.appId || modelData.title || "?").substring(0, 1).toUpperCase()
                                                     color: "#abc7ff"
-                                                    font.pixelSize: 14
-                                                    font.bold: true
-                                                }
+                                                    font.pixelSize: 14}
                                             }
 
                                             // Focus Indicator Dot
@@ -491,6 +570,7 @@ PanelWindow {
                                                 }
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
+                                                acceptedButtons: Qt.LeftButton
                                                 ToolTip {
                                                     id: appInfoTooltip
                                                     parent: appCard
@@ -504,8 +584,7 @@ PanelWindow {
                                                         radius: 6
                                                     }
 
-                                                    contentItem: Text {
-                                                        text: appInfoTooltip.text
+                                                    contentItem: Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: appInfoTooltip.text
                                                         color: "#c0c0d8"
                                                         font.pixelSize: 11
                                                         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -532,6 +611,18 @@ PanelWindow {
                                                 }
                                             }
 
+                                            TapHandler {
+                                                acceptedButtons: Qt.RightButton
+                                                onTapped: function(eventPoint, button) {
+                                                    var menuPoint = appCard.mapToItem(
+                                                        switcherWindow.contentItem,
+                                                        eventPoint.position.x,
+                                                        eventPoint.position.y
+                                                    )
+                                                    switcherWindow.showAppContextMenu(modelData, menuPoint)
+                                                }
+                                            }
+
                                             Rectangle {
                                                 id: closeAppButton
                                                 z: 2
@@ -546,15 +637,13 @@ PanelWindow {
                                                 border.color: "#ff9aa8"
                                                 border.width: 1
 
-                                                Text {
-                                                    anchors.centerIn: parent
+                                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                                                     text: "×"
                                                     color: "#ffffff"
-                                                    font.pixelSize: 15
-                                                    font.bold: true
-                                                }
+                                                    font.pixelSize: 15}
 
                                             }
+
                                         }
                                     }
                                 }
@@ -563,8 +652,7 @@ PanelWindow {
                     }
 
                     // Empty state fallback (if 0 windows open)
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.verticalCenter: parent.verticalCenter
                         visible: switcherWindow.service.workspaces.length === 0
                         text: "No open applications"
                         color: "#6b7d99"
@@ -584,8 +672,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Text {
-                    text: "Workspace"
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Workspace"
                     color: "#8092ab"
                     font.pixelSize: 10
                 }
@@ -596,10 +683,61 @@ PanelWindow {
                     sourceComponent: nextWorkspaceButtonComponent
                 }
 
+                Rectangle {
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    radius: 6
+                    color: reloadHyprlandMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: reloadHyprlandMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
+                        text: "↻"
+                        color: reloadHyprlandMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.pixelSize: 15
+                    }
+
+                    MouseArea {
+                        id: reloadHyprlandMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.reloadHyprlandConfig()
+                        ToolTip.visible: containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: "Reload Hyprland config"
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 24
+                    implicitHeight: 24
+                    radius: 6
+                    color: restartQuickshellMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: restartQuickshellMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
+                        text: "⟳"
+                        color: restartQuickshellMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.pixelSize: 15
+                    }
+
+                    MouseArea {
+                        id: restartQuickshellMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.restartQuickshell()
+                        ToolTip.visible: containsMouse
+                        ToolTip.delay: 500
+                        ToolTip.text: "Restart Quickshell"
+                    }
+                }
+
                 Item { Layout.fillWidth: true }
 
-                Text {
-                    text: "Session"
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Session"
                     color: "#8092ab"
                     font.pixelSize: 10
                 }
@@ -624,4 +762,122 @@ PanelWindow {
             }
         }
     }
+
+    MouseArea {
+        anchors.fill: parent
+        z: 90
+        visible: switcherWindow.contextMenuWindow !== null
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onClicked: switcherWindow.contextMenuWindow = null
+    }
+
+    GlowBorder {
+        targetItem: appContextMenu
+        cornerRadius: appContextMenu.radius
+        spread: 3
+    }
+
+    Rectangle {
+        id: appContextMenu
+        x: switcherWindow.contextMenuX
+        y: switcherWindow.contextMenuY
+        z: 100
+        width: 256
+        height: contextMenuContent.implicitHeight + 16
+        visible: switcherWindow.contextMenuWindow !== null
+        radius: 10
+        color: "#f2111722"
+        border.color: "#3b4a63"
+        border.width: 1
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {}
+        }
+
+        ColumnLayout {
+            id: contextMenuContent
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 3
+
+            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
+                Layout.leftMargin: 6
+                Layout.rightMargin: 6
+                Layout.preferredHeight: 24
+                text: switcherWindow.contextMenuWindow
+                    ? (switcherWindow.contextMenuWindow.appId || switcherWindow.contextMenuWindow.title || "Application")
+                    : "Application"
+                color: "#abc7ff"
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Repeater {
+                model: [
+                    {
+                        label: switcherWindow.contextMenuWindow && switcherWindow.service.isWindowAppPinned(switcherWindow.contextMenuWindow)
+                            ? "Unpin from launcher" : "Pin to launcher",
+                        action: "toggle-pin"
+                    },
+                    { label: "Focus window", action: "focus" },
+                    { label: "Launch another instance", action: "launch" },
+                    { label: "Close window", action: "close" },
+                    { label: "Close all windows from this app", action: "close-all" }
+                ]
+
+                delegate: Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    radius: 6
+                    color: contextActionMouse.containsMouse ? "#273650" : "transparent"
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        text: modelData.label
+                        color: contextActionMouse.containsMouse ? "#abc7ff" : "#dce5f2"
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    MouseArea {
+                        id: contextActionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.invokeAppContextAction(modelData.action)
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                radius: 6
+                color: fullscreenMenuMouse.containsMouse ? "#273650" : "transparent"
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    spacing: 8
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "⛶"; color: "#dce5f2"; font.pixelSize: 14 }
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Toggle fullscreen"; color: fullscreenMenuMouse.containsMouse ? "#abc7ff" : "#dce5f2"; font.pixelSize: 11 }
+                }
+
+                MouseArea {
+                    id: fullscreenMenuMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: switcherWindow.invokeAppContextAction("fullscreen")
+                }
+            }
+        }
+    }
+
 }

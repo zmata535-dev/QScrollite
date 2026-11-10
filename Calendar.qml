@@ -92,6 +92,8 @@ PanelWindow {
             }
         }
 
+        GlowBorder { targetItem: card; cornerRadius: card.radius }
+
         Rectangle {
             id: card
             width: Math.min(388, root.width - 32)
@@ -120,14 +122,13 @@ PanelWindow {
                     Rectangle {
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
-                        radius: 8
-                        color: previousMouse.containsMouse ? "#273650" : "#1a2230"
-                        border.color: previousMouse.containsMouse ? "#75baff" : "#35445c"
+                        radius: 6
+                        color: previousMouse.containsMouse ? "#273650" : "#161d2a"
+                        border.color: previousMouse.containsMouse ? "#abc7ff" : "#2b364a"
 
-                        Text {
-                            anchors.centerIn: parent
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                             text: "‹"
-                            color: "#abc7ff"
+                            color: previousMouse.containsMouse ? "#abc7ff" : "#8092ab"
                             font.pixelSize: 22
                         }
 
@@ -140,26 +141,23 @@ PanelWindow {
                         }
                     }
 
-                    Text {
-                        Layout.fillWidth: true
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                         text: root.monthTitle
                         color: "#e2e8f0"
                         font.pixelSize: 18
-                        font.bold: true
-                        horizontalAlignment: Text.AlignHCenter
+horizontalAlignment: Text.AlignHCenter
                     }
 
                     Rectangle {
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
-                        radius: 8
-                        color: nextMouse.containsMouse ? "#273650" : "#1a2230"
-                        border.color: nextMouse.containsMouse ? "#75baff" : "#35445c"
+                        radius: 6
+                        color: nextMouse.containsMouse ? "#273650" : "#161d2a"
+                        border.color: nextMouse.containsMouse ? "#abc7ff" : "#2b364a"
 
-                        Text {
-                            anchors.centerIn: parent
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                             text: "›"
-                            color: "#abc7ff"
+                            color: nextMouse.containsMouse ? "#abc7ff" : "#8092ab"
                             font.pixelSize: 22
                         }
 
@@ -182,15 +180,13 @@ PanelWindow {
                     Repeater {
                         model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-                        Text {
-                            required property string modelData
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;required property string modelData
                             Layout.fillWidth: true
                             Layout.preferredHeight: 24
                             text: modelData
                             color: "#8290a7"
                             font.pixelSize: 10
-                            font.bold: true
-                            horizontalAlignment: Text.AlignHCenter
+horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
                     }
@@ -202,21 +198,19 @@ PanelWindow {
                             required property var modelData
                             Layout.fillWidth: true
                             Layout.preferredHeight: 38
-                            radius: 8
-                            color: modelData.isSelected ? "#3d5e86"
-                                : (modelData.isToday ? "#25364e"
-                                : (dayMouse.containsMouse ? "#202c3e" : "transparent"))
-                            border.color: modelData.isToday ? "#75baff" : "transparent"
-                            border.width: modelData.isToday ? 1 : 0
+                            radius: 6
+                            color: modelData.isSelected ? "#22334f"
+                                : (modelData.isToday ? "#1d2a3e"
+                                : (dayMouse.containsMouse ? "#273650" : "transparent"))
+                            border.color: modelData.isSelected ? "#abc7ff"
+                                : (modelData.isToday ? "#5476a4" : "transparent")
+                            border.width: modelData.isToday || modelData.isSelected ? 1 : 0
 
-                            Text {
-                                anchors.centerIn: parent
+                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                                 text: modelData.day
                                 color: !modelData.inMonth ? "#526078"
                                     : (modelData.isSelected ? "#ffffff" : "#dce5f2")
-                                font.pixelSize: 12
-                                font.bold: modelData.isToday || modelData.isSelected
-                            }
+                                font.pixelSize: 12}
 
                             MouseArea {
                                 id: dayMouse
@@ -233,8 +227,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Text {
-                        Layout.fillWidth: true
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                         text: root.selectedDateLabel
                         color: "#94a3b8"
                         font.pixelSize: 11
@@ -244,17 +237,14 @@ PanelWindow {
                     Rectangle {
                         implicitWidth: 54
                         implicitHeight: 28
-                        radius: 7
-                        color: todayMouse.containsMouse ? "#273650" : "#1a2230"
-                        border.color: todayMouse.containsMouse ? "#75baff" : "#35445c"
+                        radius: 6
+                        color: todayMouse.containsMouse ? "#273650" : "#161d2a"
+                        border.color: todayMouse.containsMouse ? "#abc7ff" : "#2b364a"
 
-                        Text {
-                            anchors.centerIn: parent
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                             text: "Today"
-                            color: "#abc7ff"
-                            font.pixelSize: 11
-                            font.bold: true
-                        }
+                            color: todayMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                            font.pixelSize: 11}
 
                         MouseArea {
                             id: todayMouse

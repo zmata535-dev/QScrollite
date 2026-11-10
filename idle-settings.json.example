@@ -1,8 +1,12 @@
 {
   "clockTimeout": 9,
+  "compactClockTimeout": 3,
   "dimTimeout": 15,
   "displayOffTimeout": 21,
   "lockTimeout": 26,
   "clockTextColor": "#e2e8f0",
-  "clockTextSize": 96
+  "clockTextSize": 96,
+  "compactClockTextSize": 36,
+  "clockShatterAnimationEnabled": true,
+  "clockSlideAnimationEnabled": false
 }

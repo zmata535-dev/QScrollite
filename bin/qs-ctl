@@ -21,8 +21,8 @@ Commands:
   calendar [toggle|open|close]
       Toggle or control the calendar card (default: toggle)
 
-  clock [open|close|activity|status]
-      Control the idle/lock clock card
+  clock [open|compact|close|activity|status]
+      Control the idle clock card or show its compact form
 
   wallpaper [toggle|next|prev|random|set <path>|rescan|status]
       Control wallpaper and wallpaper selector (default: toggle)
@@ -88,6 +88,7 @@ case "$cmd" in
         action="${2:-open}"
         case "$action" in
             open)     "$QS_BIN" ipc call clock open ;;
+            compact)  "$QS_BIN" ipc call clock compact ;;
             close)    "$QS_BIN" ipc call clock close ;;
             activity) "$QS_BIN" ipc call clock activity ;;
             status)   "$QS_BIN" ipc call clock isOpen ;;
@@ -154,14 +155,15 @@ case "$cmd" in
         ;;
 
     start)
-        if pgrep -x quickshell >/dev/null 2>&1; then
-            echo "Quickshell is already running (PID: $(pgrep -x quickshell | tr '\n' ' '))"
+        if pgrep -x quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
+            running_pids="$({ pgrep -x quickshell || true; pgrep -x qs || true; } | tr '\n' ' ')"
+            echo "Quickshell is already running (PID: ${running_pids})"
             exit 0
         fi
         echo "Starting quickshell..."
         nohup quickshell >/dev/null 2>&1 &
         sleep 0.5
-        if pgrep -x quickshell >/dev/null 2>&1; then
+        if pgrep -x quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
             echo "Quickshell started successfully."
         else
             echo "Warning: quickshell did not start or exited immediately." >&2
@@ -171,7 +173,7 @@ case "$cmd" in
 
     stop)
         echo "Stopping quickshell..."
-        killall -q quickshell || true
+        killall -q quickshell qs || true
         echo "Stopped."
         ;;
 
@@ -182,8 +184,9 @@ case "$cmd" in
         ;;
 
     status)
-        if pgrep -x quickshell >/dev/null 2>&1; then
-            echo "Quickshell is running (PID: $(pgrep -x quickshell | tr '\n' ' '))"
+        if pgrep -x quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
+            running_pids="$({ pgrep -x quickshell || true; pgrep -x qs || true; } | tr '\n' ' ')"
+            echo "Quickshell is running (PID: ${running_pids})"
         else
             echo "Quickshell is not running."
         fi

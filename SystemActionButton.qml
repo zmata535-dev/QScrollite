@@ -23,8 +23,7 @@ Item {
             : "#2b364a"
         border.width: 1
 
-        Text {
-            anchors.centerIn: parent
+        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
             text: root.glyph
             color: mouse.containsMouse
                 ? (root.action === "shutdown" || root.action === "reboot" ? "#ffb3ba" : "#abc7ff")

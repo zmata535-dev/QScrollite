@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Quickshell Configuration Installer
-# Installs and configures this modular Quickshell desktop shell suite on Linux.
+# QScrollite Installer
+# Installs and configures Quickshell on Hyprland Scrolling with maximum mouse usage.
 #
 
 set -euo pipefail
@@ -38,7 +38,7 @@ UNINSTALL=false
 
 usage() {
     cat << EOF
-${C_BOLD}Quickshell Configuration Installer${C_RESET}
+${C_BOLD}QScrollite Installer${C_RESET}
 
 ${C_BOLD}USAGE:${C_RESET}
     ./install.sh [OPTIONS]
@@ -423,7 +423,7 @@ install_systemd_service() {
 }
 
 uninstall() {
-    log_step "Uninstalling Quickshell Configuration"
+    log_step "Uninstalling QScrollite"
 
     if [ -L "$TARGET_DIR" ]; then
         log_info "Removing symlink $TARGET_DIR"

@@ -48,7 +48,7 @@ QtObject {
         if (activeCompositor === "niri") {
             Quickshell.execDetached(["niri", "msg", "action", "focus-column-right"]);
         } else {
-            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ direction = \"right\" })"]);
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.layout(\"focus r\")"]);
         }
     }
 
@@ -56,7 +56,7 @@ QtObject {
         if (activeCompositor === "niri") {
             Quickshell.execDetached(["niri", "msg", "action", "focus-column-left"]);
         } else {
-            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ direction = \"left\" })"]);
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.layout(\"focus l\")"]);
         }
     }
 
@@ -66,6 +66,15 @@ QtObject {
         } else {
             //Quickshell.execDetached(["hyprctl", "dispatch", "function() pcall(function() hl.dispatch(hl.dsp.layout(\"fit active\")) end); pcall(function() hl.dispatch(hl.dsp.window.center()) end) end"]);            		
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.layout('center')"]);
+        }
+    }
+
+    function toggleAppSwitcher() {
+        if (!switcherService) return;
+        if (switcherService.open) {
+            switcherService.closeSwitcher();
+        } else {
+            switcherService.openSwitcher();
         }
     }
 
@@ -96,9 +105,7 @@ QtObject {
         } else if (corner === "top-left") {
             if (now - lastTriggerTL < cd) return false;
             lastTriggerTL = now;
-            if (switcherService) {
-                switcherService.toggle();
-            }
+            toggleAppSwitcher();
             cornerTriggered("top-left", screenName || "");
             return true;
         }

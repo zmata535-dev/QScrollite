@@ -1,6 +1,8 @@
-# Modular Quickshell Desktop Suite
+# QScrollite
 
-A feature-packed, modular desktop shell and widgets suite built with [Quickshell](https://git.outfoxxed.me/outfoxxed/quickshell) (Qt6 / QML) for Wayland.
+## Quickshell on Hyprland Scrolling with maximum mouse usage
+
+A feature-packed desktop shell built with [Quickshell](https://git.outfoxxed.me/outfoxxed/quickshell) (Qt6 / QML) for Hyprland's scrolling layout.
 
 ---
 

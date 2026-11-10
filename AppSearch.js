@@ -85,15 +85,20 @@ function fuzzyScore(entry, query) {
   return 4000 - name.length
 }
 
-function sortedEntries(values, query, hiddenCallback, recentIds) {
+function sortedEntries(values, query, hiddenCallback, recentIds, pinnedIds, includeAll) {
   var q = String(query || "").trim()
   var recent = recentIds && typeof recentIds.indexOf === "function" ? recentIds : []
+  var pinned = pinnedIds && typeof pinnedIds.indexOf === "function" ? pinnedIds : []
   var rows = []
   for (var i = 0; i < values.length; i++) {
     var entry = values[i]
     if (!entry || entry.noDisplay || (hiddenCallback && hiddenCallback(entry))) continue
     var name = entryName(entry)
     if (!name) continue
+    var id = entryId(entry)
+    var pinnedIndex = pinned.indexOf(id)
+    var recentIndex = recent.indexOf(id)
+    if (!q && !includeAll && pinnedIndex < 0 && recentIndex < 0) continue
     var score = fuzzyScore(entry, q)
     if (score < 0) continue
     rows.push({
@@ -101,11 +106,15 @@ function sortedEntries(values, query, hiddenCallback, recentIds) {
       score: score,
       key: entrySortKey(entry),
       name: name.toLowerCase(),
-      recentIndex: recent.indexOf(entryId(entry))
+      pinnedIndex: pinnedIndex,
+      recentIndex: recentIndex
     })
   }
   rows.sort(function(a, b) {
     if (q && a.score !== b.score) return b.score - a.score
+    var aPinned = a.pinnedIndex < 0 ? 2147483647 : a.pinnedIndex
+    var bPinned = b.pinnedIndex < 0 ? 2147483647 : b.pinnedIndex
+    if (aPinned !== bPinned) return aPinned - bPinned
     var aRecent = a.recentIndex < 0 ? 2147483647 : a.recentIndex
     var bRecent = b.recentIndex < 0 ? 2147483647 : b.recentIndex
     if (aRecent !== bRecent) return aRecent - bRecent

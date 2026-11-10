@@ -14,12 +14,16 @@ home = Path.home()
 settings_path = home / ".config/quickshell/idle-settings.json"
 config_path = home / ".config/hypr/hypridle.conf"
 defaults = {
+    "compactClockTimeout": 3,
     "clockTimeout": 9,
     "dimTimeout": 15,
     "displayOffTimeout": 21,
     "lockTimeout": 26,
     "clockTextColor": "#e2e8f0",
     "clockTextSize": 96,
+    "compactClockTextSize": 36,
+    "clockShatterAnimationEnabled": True,
+    "clockSlideAnimationEnabled": False,
 }
 
 
@@ -35,7 +39,31 @@ try:
 except (OSError, json.JSONDecodeError):
     settings = defaults.copy()
 
-if len(sys.argv) == 7:
+if len(sys.argv) == 9:
+    keys = (
+        "compactClockTimeout",
+        "clockTimeout",
+        "dimTimeout",
+        "displayOffTimeout",
+        "lockTimeout",
+        "clockTextColor",
+        "clockTextSize",
+        "compactClockTextSize",
+    )
+    settings.update(zip(keys, sys.argv[1:]))
+elif len(sys.argv) == 8:
+    keys = (
+        "compactClockTimeout",
+        "clockTimeout",
+        "dimTimeout",
+        "displayOffTimeout",
+        "lockTimeout",
+        "clockTextColor",
+        "clockTextSize",
+    )
+    settings.update(zip(keys, sys.argv[1:]))
+elif len(sys.argv) == 7:
+    # Keep accepting the earlier six-value invocation.
     keys = (
         "clockTimeout",
         "dimTimeout",
@@ -46,23 +74,33 @@ if len(sys.argv) == 7:
     )
     settings.update(zip(keys, sys.argv[1:]))
 
+compact_clock = bounded_int("compactClockTimeout", 1, 3600)
 clock = bounded_int("clockTimeout", 1, 3600)
 dim = bounded_int("dimTimeout", 1, 3600)
 display_off = bounded_int("displayOffTimeout", 1, 3600)
 lock = bounded_int("lockTimeout", 1, 3600)
 clock_size = bounded_int("clockTextSize", 32, 160)
+compact_clock_size = bounded_int("compactClockTextSize", 12, 72)
+clock_shatter_animation = settings.get("clockShatterAnimationEnabled") is True
+clock_slide_animation = settings.get("clockSlideAnimationEnabled") is True
+if clock_shatter_animation and clock_slide_animation:
+    clock_slide_animation = False
 clock_color = str(settings.get("clockTextColor", defaults["clockTextColor"]))
 if not re.fullmatch(r"#[0-9a-fA-F]{6}", clock_color):
     clock_color = defaults["clockTextColor"]
 
 # Persist sanitized values as well, so the UI and generated daemon config agree.
 settings.update(
+    compactClockTimeout=compact_clock,
     clockTimeout=clock,
     dimTimeout=dim,
     displayOffTimeout=display_off,
     lockTimeout=lock,
     clockTextColor=clock_color,
     clockTextSize=clock_size,
+    compactClockTextSize=compact_clock_size,
+    clockShatterAnimationEnabled=clock_shatter_animation,
+    clockSlideAnimationEnabled=clock_slide_animation,
 )
 settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 
@@ -73,8 +111,15 @@ config = f'''general {{
 }}
 
 listener {{
+    timeout = {compact_clock}
+    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
+    on-timeout = qs ipc call clock compact
+    on-resume = qs ipc call clock activity
+}}
+
+listener {{
     timeout = {clock}
-    condition_cmd = qs ipc call clock isOpen | grep -qx false
+    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
     on-timeout = qs ipc call clock open
     on-resume = qs ipc call clock activity
 }}
