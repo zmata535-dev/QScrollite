@@ -30,6 +30,7 @@ QtObject {
     property alias idleClockTextColor: idleSettings.clockTextColor
     property alias idleClockTextSize: idleSettings.clockTextSize
     property alias compactClockTextSize: idleSettings.compactClockTextSize
+    property alias iconTheme: idleSettings.iconTheme
     property alias clockCardBackgroundOpacity: idleSettings.clockCardBackgroundOpacity
     property alias clockShatterAnimationEnabled: idleSettings.clockShatterAnimationEnabled
     property alias clockSlideAnimationEnabled: idleSettings.clockSlideAnimationEnabled
@@ -64,6 +65,7 @@ QtObject {
             property int displayOffTimeout: 21
             property int lockTimeout: 26
             property string clockTextColor: "#e2e8f0"
+            property string iconTheme: "Suru++"
             property int clockTextSize: 96
             property int compactClockTextSize: 36
             property int clockCardBackgroundOpacity: 100
@@ -92,7 +94,7 @@ QtObject {
         running: false
         onExited: function(exitCode, exitStatus) {
             if (exitCode === 0) {
-                service.idleApplyStatus = "Applied; hypridle restarted"
+                service.idleApplyStatus = "GTK/Qt theme saved; hypridle restarted"
             } else {
                 service.idleApplyStatus = "Apply failed (exit " + exitCode + ")"
                 console.warn("[IdleSettings] Apply script exited with code", exitCode, exitStatus)
@@ -357,11 +359,18 @@ QtObject {
     }
 
     function openSwitcher() {
+        cancelCompactClockForAppPanels();
         detectCompositor();
         workspaces = [];
         activeWindowId = "";
         refresh();
         open = true;
+    }
+
+    function cancelCompactClockForAppPanels() {
+        compactClockOpenTimer.stop();
+        compactClockPending = false;
+        closeCompactClock();
     }
 
     function closeSwitcher(force) {
@@ -444,6 +453,31 @@ QtObject {
     function appEntryForWindow(win) {
         if (!win) return null;
         try { return DesktopEntries.heuristicLookup(win.appId || win.title || ""); } catch (e) { return null; }
+    }
+
+    function normalizedDesktopEntryId(id) {
+        var value = String(id || "").trim();
+        if (value && !value.endsWith(".desktop")) value += ".desktop";
+        return value;
+    }
+
+    function pinnedAppIsRunning(id) {
+        var targetId = normalizedDesktopEntryId(id).toLowerCase();
+        if (!targetId) return false;
+        for (var i = 0; i < workspaces.length; i++) {
+            var windows = workspaces[i].windows || [];
+            for (var j = 0; j < windows.length; j++) {
+                var entry = appEntryForWindow(windows[j]);
+                if (entry && normalizedDesktopEntryId(entry.id).toLowerCase() === targetId) return true;
+                if (normalizedDesktopEntryId(windows[j].appId).toLowerCase() === targetId) return true;
+            }
+        }
+        return false;
+    }
+
+    function launchPinnedApp(id) {
+        var entryId = normalizedDesktopEntryId(id);
+        if (entryId) Quickshell.execDetached(["gtk-launch", entryId]);
     }
 
     function isWindowAppPinned(win) {
@@ -564,8 +598,11 @@ QtObject {
         onTriggered: {
             if (!service.compactClockPending) return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.open || service.appMenuOpen || service.appMenuPending ||
-                    service.calendarOpen || service.calendarPending || service.clockOpen ||
+            if (service.open || service.appMenuOpen || service.appMenuPending) {
+                service.compactClockPending = false;
+                return;
+            }
+            if (service.calendarOpen || service.calendarPending || service.clockOpen ||
                     service.clockCloseRequested || service.idleConfigOpen || wallpaperOpen ||
                     service.wallpaperToggleTimer.running) {
                 restart();
@@ -626,6 +663,11 @@ QtObject {
     }
 
     function requestCompactClock() {
+        if (open || appMenuOpen || appMenuPending) {
+            compactClockOpenTimer.stop();
+            compactClockPending = false;
+            return;
+        }
         closeSwitcher();
         appMenuTimer.stop();
         appMenuPending = false;
@@ -702,7 +744,8 @@ QtObject {
                 idleLockTimeout.toString(),
                 idleClockTextColor,
                 idleClockTextSize.toString(),
-                compactClockTextSize.toString()
+                compactClockTextSize.toString(),
+                iconTheme
             ]
         });
     }
@@ -740,6 +783,7 @@ QtObject {
     }
 
     function openAppMenu() {
+        cancelCompactClockForAppPanels();
         closeSwitcher();
         appMenuPending = true;
         appMenuTimer.restart();

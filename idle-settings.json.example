@@ -5,6 +5,7 @@
   "displayOffTimeout": 21,
   "lockTimeout": 26,
   "clockTextColor": "#e2e8f0",
+  "iconTheme": "Suru++",
   "clockTextSize": 96,
   "compactClockTextSize": 36,
   "clockShatterAnimationEnabled": true,

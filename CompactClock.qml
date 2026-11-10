@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Wayland
 
@@ -99,23 +100,6 @@ PanelWindow {
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.AllButtons
-            property bool pointerPositionKnown: false
-            property point lastPointerPosition: Qt.point(0, 0)
-
-            onEntered: {
-                lastPointerPosition = Qt.point(mouseX, mouseY)
-                pointerPositionKnown = true
-            }
-            onExited: pointerPositionKnown = false
-            onPositionChanged: {
-                var current = Qt.point(mouseX, mouseY)
-                if (pointerPositionKnown &&
-                        (current.x !== lastPointerPosition.x || current.y !== lastPointerPosition.y)) {
-                    root.service.closeCompactClock()
-                }
-                lastPointerPosition = current
-                pointerPositionKnown = true
-            }
             onPressed: root.service.closeCompactClock()
             onWheel: root.service.closeCompactClock()
         }
@@ -136,18 +120,60 @@ PanelWindow {
             border.color: "#3b4a63"
             border.width: 1
 
-            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
-                text: Qt.formatDateTime(root.now, "HH") + (root.colonVisible ? ":" : " ") + Qt.formatDateTime(root.now, "mm")
+        }
+
+        Button {
+            id: clockButton
+            x: compactCard.x + (compactCard.width - width) / 2
+            y: Math.max(0, compactCard.y + (compactCard.height - height) / 2)
+            width: Math.max(compactCard.width, clockButtonText.implicitWidth) + 36
+            height: Math.max(compactCard.height, clockButtonText.implicitHeight) + 36
+            z: 11
+            padding: 0
+            text: Qt.formatDateTime(root.now, "HH") + (root.colonVisible ? ":" : " ") + Qt.formatDateTime(root.now, "mm")
+            background: Item {}
+            contentItem: Text {
+                id: clockButtonText
+                height: implicitHeight
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: compactCard.y + compactCard.height / 2 - height / 2 - clockButton.y
+                text: clockButton.text
                 color: "#ffffff"
+                font.family: "JetBrainsMono Nerd Font Mono"
+                font.weight: Font.Light
                 font.pixelSize: root.service.compactClockTextSize
-horizontalAlignment: Text.AlignHCenter
+                horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
+            onClicked: {
+                root.service.closeCompactClock()
+                root.service.openCalendar()
+            }
 
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: root.service.closeCompactClock()
+        }
+
+        MouseArea {
+            id: clockButtonPointer
+            anchors.fill: clockButton
+            z: 12
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            cursorShape: Qt.PointingHandCursor
+            property bool pointerWasOverClock: false
+            onEntered: pointerWasOverClock = true
+            onExited: {
+                if (pointerWasOverClock) {
+                    pointerWasOverClock = false
+                    root.service.closeCompactClock()
+                }
+            }
+            onPressed: function(mouse) {
+                if (mouse.button === Qt.LeftButton) {
+                    root.service.closeCompactClock()
+                    root.service.openCalendar()
+                } else {
+                    root.service.closeCompactClock()
+                }
             }
         }
     }

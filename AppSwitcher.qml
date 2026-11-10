@@ -31,6 +31,35 @@ PanelWindow {
     property var contextMenuWindow: null
     property real contextMenuX: 0
     property real contextMenuY: 0
+    property var inactivePinnedApps: {
+        var result = []
+        var pins = switcherWindow.service.pinnedApps || []
+        var entries = (typeof DesktopEntries !== "undefined" && DesktopEntries.applications && DesktopEntries.applications.values)
+            ? DesktopEntries.applications.values : []
+        for (var i = 0; i < pins.length; i++) {
+            var pinnedId = String(pins[i])
+            var entry = null
+            for (var j = 0; j < entries.length; j++) {
+                var entryId = String(entries[j].id || "")
+                if (entryId && !entryId.endsWith(".desktop")) entryId += ".desktop"
+                if (entryId.toLowerCase() === pinnedId.toLowerCase()) {
+                    entry = entries[j]
+                    break
+                }
+            }
+            if (entry && !switcherWindow.service.pinnedAppIsRunning(pinnedId)) result.push(entry)
+        }
+        return result
+    }
+
+    function appIconSource(iconName) {
+        var value = String(iconName || "")
+        if (!value) return Quickshell.iconPath("application-x-executable", true)
+        if (value.indexOf("file://") === 0 || value.indexOf("image://") === 0) return value
+        if (value.charAt(0) === "/") return "file://" + value
+        return Quickshell.iconPath(value, true) || Quickshell.iconPath("application-x-executable", true)
+    }
+
     function showAppContextMenu(win, point) {
         contextMenuWindow = win;
         contextMenuX = Math.max(8, Math.min(width - 264, point.x));
@@ -97,8 +126,8 @@ PanelWindow {
         id: nextWorkspaceButtonComponent
 
         Rectangle {
-            implicitWidth: 24
-            implicitHeight: 24
+            implicitWidth: 22
+            implicitHeight: 22
             radius: 6
             color: nextWorkspaceMouse.containsMouse ? "#273650" : "#161d2a"
             border.color: nextWorkspaceMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -107,7 +136,7 @@ PanelWindow {
             Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                 text: "↓"
                 color: nextWorkspaceMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                font.pixelSize: 15
+                font.pixelSize: 14
             }
 
             MouseArea {
@@ -150,8 +179,8 @@ PanelWindow {
             leftMargin: 16
         }
 
-        width: Math.min(switcherWindow.width - 32, Math.max(560, mainCol.implicitWidth + 28)) * 0.9
-        height: mainCol.implicitHeight + 24
+        width: Math.min(switcherWindow.width - 32, Math.max(500, mainCol.implicitWidth + 16)) * 0.9
+        height: mainCol.implicitHeight + 14
 
         color: "#111622"
         radius: 14
@@ -179,16 +208,16 @@ PanelWindow {
                 top: parent.top
                 left: parent.left
                 right: parent.right
-                topMargin: 12
-                leftMargin: 14
-                rightMargin: 14
+                topMargin: 7
+                leftMargin: 9
+                rightMargin: 9
             }
-            spacing: 10
+            spacing: 5
 
             // Header Row (Clock, Date, Compositor Chip, Preview Toggle, Close)
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: 7
 
                 // Two-line Clock and Date
                 Item {
@@ -201,11 +230,11 @@ PanelWindow {
 
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "HH:mm")
                             color: "#f1f5f9"
-                            font.pixelSize: 20}
+                            font.pixelSize: 18}
 
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "dddd, dd MMM yy")
                             color: "#94a3b8"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                         }
                     }
 
@@ -236,8 +265,8 @@ PanelWindow {
 
                 // Configure the idle timers and clock card appearance
                 Rectangle {
-                    implicitWidth: 24
-                    implicitHeight: 24
+                    implicitWidth: 22
+                    implicitHeight: 22
                     radius: 6
                     color: idleSettingsMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -246,7 +275,7 @@ PanelWindow {
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "◷"
                         color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 24
+                        font.pixelSize: 21
                     }
 
                     MouseArea {
@@ -260,8 +289,8 @@ PanelWindow {
 
                 // Open the wallpaper picker
                 Rectangle {
-                    implicitWidth: 24
-                    implicitHeight: 24
+                    implicitWidth: 22
+                    implicitHeight: 22
                     radius: 6
                     color: wallpaperMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: wallpaperMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -270,7 +299,7 @@ PanelWindow {
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "▧"
                         color: wallpaperMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 18
+                        font.pixelSize: 16
                     }
 
                     MouseArea {
@@ -294,8 +323,8 @@ PanelWindow {
 
                         delegate: Rectangle {
                             required property var modelData
-                            implicitWidth: 40
-                            implicitHeight: 24
+                            implicitWidth: 32
+                            implicitHeight: 20
                             radius: 6
                             color: widthButtonMouse.containsMouse ? "#273650" : "#161d2a"
                             border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -304,7 +333,7 @@ PanelWindow {
                             Rectangle {
                                 anchors.centerIn: parent
                                 width: modelData.glyphWidth
-                                height: 13
+                                height: 11
                                 radius: 1
                                 color: "transparent"
                                 border.width: 1
@@ -328,8 +357,8 @@ PanelWindow {
 
                 // Keep fullscreen immediately after the Wide column button.
                 Rectangle {
-                    implicitWidth: 24
-                    implicitHeight: 24
+                    implicitWidth: 22
+                    implicitHeight: 22
                     radius: 6
                     color: fullscreenFocusedMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -338,7 +367,7 @@ PanelWindow {
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "⛶"
                         color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 21
+                        font.pixelSize: 18
                     }
 
                     MouseArea {
@@ -367,9 +396,9 @@ PanelWindow {
             Flickable {
                 id: appsFlickable
                 Layout.fillWidth: true
-                implicitHeight: 82
+                implicitHeight: 48
                 contentWidth: appsRow.childrenRect.width
-                contentHeight: 74
+                contentHeight: 48
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
 
@@ -393,52 +422,47 @@ PanelWindow {
 
                 Row {
                     id: appsRow
-                    spacing: 10
+                    spacing: 8
                     anchors.verticalCenter: parent.verticalCenter
 
                     // 1. FIRST ICON: BUTTON FOR THE QUICKShell APP MENU
                     Rectangle {
                         id: appMenuBtn
-                        width: 54
-                        height: 64
-                        radius: 6
-                        color: appMenuMouse.containsMouse ? "#273650" : "#161d2a"
-                        border.color: appMenuMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                        width: 48
+                        height: 48
+                        radius: 9
+                        color: appMenuMouse.containsMouse ? "#202a3a" : "#18202d"
+                        border.color: appMenuMouse.containsMouse ? "#abc7ff" : "#2a364a"
                         border.width: 1
 
-                        ColumnLayout {
+                        Image {
+                            id: appMenuThemeIcon
                             anchors.centerIn: parent
-                            spacing: 3
+                            width: 24
+                            height: 24
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            source: Quickshell.iconPath("view-app-grid-symbolic", true)
+                                || Quickshell.iconPath("applications-all", true)
+                                || ""
+                            visible: status === Image.Ready
+                        }
 
-                            // Launcher grid / icon
-                            Rectangle {
-                                Layout.alignment: Qt.AlignHCenter
-                                width: 32
-                                height: 32
-                                radius: 8
-                                color: "#25344e"
-
-                                // Grid of 4 rounded dots
-                                Grid {
-                                    anchors.centerIn: parent
-                                    columns: 2
-                                    spacing: 4
-                                    Repeater {
-                                        model: 4
-                                        Rectangle {
-                                            width: 7
-                                            height: 7
-                                            radius: 2
-                                            color: appMenuMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                                        }
-                                    }
+                        // Keep a simple grid glyph available if the active theme lacks an app-grid icon.
+                        Grid {
+                            anchors.centerIn: parent
+                            visible: !appMenuThemeIcon.visible
+                            columns: 2
+                            spacing: 4
+                            Repeater {
+                                model: 4
+                                Rectangle {
+                                    width: 7
+                                    height: 7
+                                    radius: 2
+                                    color: appMenuMouse.containsMouse ? "#abc7ff" : "#8092ab"
                                 }
                             }
-
-                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
-                                text: "Apps"
-                                color: appMenuMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                                font.pixelSize: 9}
                         }
 
                         MouseArea {
@@ -452,10 +476,58 @@ PanelWindow {
                         }
                     }
 
+                    // Show pinned apps that are not currently running.
+                    Repeater {
+                        model: switcherWindow.inactivePinnedApps
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: 40
+                            height: 40
+                            anchors.verticalCenter: parent.verticalCenter
+                            radius: 9
+                            color: pinnedAppMouse.containsMouse ? "#202a3a" : "#18202d"
+                            border.width: 0
+
+                            Image {
+                                id: pinnedAppIcon
+                                anchors.fill: parent
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                source: switcherWindow.appIconSource(modelData.icon)
+                                visible: status === Image.Ready && source !== ""
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: !pinnedAppIcon.visible
+                                text: String(modelData.name || modelData.id || "?").substring(0, 1).toUpperCase()
+                                color: "#abc7ff"
+                                font.family: "JetBrainsMono Nerd Font Mono"
+                                font.pixelSize: 12
+                            }
+
+                            MouseArea {
+                                id: pinnedAppMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    switcherWindow.service.launchPinnedApp(modelData.id)
+                                    switcherWindow.service.closeSwitcher(true)
+                                }
+                            }
+
+                            ToolTip.visible: pinnedAppMouse.containsMouse
+                            ToolTip.text: modelData.name || modelData.id
+                            ToolTip.delay: 450
+                        }
+                    }
+
                     // Vertical Separator
                     Rectangle {
                         width: 1
-                        height: 48
+                        height: 36
                         color: "#263246"
                         anchors.verticalCenter: parent.verticalCenter
                     }
@@ -471,19 +543,19 @@ PanelWindow {
                             color: "#151b27"
                             border.color: "#232d3f"
                             border.width: 1
-                            implicitWidth: wsContentRow.implicitWidth + 14
-                            implicitHeight: 64
+                            implicitWidth: wsContentRow.implicitWidth + 10
+                            implicitHeight: 48
 
                             Row {
                                 id: wsContentRow
                                 anchors.centerIn: parent
-                                spacing: 8
+                                spacing: 6
 
                                 // Workspace Label Badge
                                 Rectangle {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 22
-                                    height: 48
+                                    width: 20
+                                    height: 34
                                     radius: 6
                                     color: "#1c2536"
                                     border.color: "#2e3e57"
@@ -506,13 +578,12 @@ PanelWindow {
                                         // App Icon Button
                                         Rectangle {
                                             id: appCard
-                                            width: 48
-                                            height: 48
+                                            width: 40
+                                            height: 40
                                             radius: 9
 
                                             color: modelData.focused ? "#22334f" : (appMouse.containsMouse ? "#202a3a" : "#18202d")
-                                            border.color: modelData.focused ? "#abc7ff" : (appMouse.containsMouse ? "#4e6285" : "#2a364a")
-                                            border.width: modelData.focused ? 2 : 1
+                                            border.width: 0
 
                                             Component.onCompleted: {
                                                 if (modelData.focused) switcherWindow.scrollToFocusedIcon(appCard)
@@ -521,9 +592,7 @@ PanelWindow {
                                             // App Icon Image
                                             Image {
                                                 id: iconImg
-                                                anchors.centerIn: parent
-                                                width: 30
-                                                height: 30
+                                                anchors.fill: parent
                                                 fillMode: Image.PreserveAspectFit
                                                 asynchronous: true
                                                 source: modelData.icon || ""
@@ -533,16 +602,16 @@ PanelWindow {
                                             // Fallback initial letter badge if icon not loaded
                                             Rectangle {
                                                 anchors.centerIn: parent
-                                                width: 30
-                                                height: 30
-                                                radius: 6
+                                                width: 24
+                                                height: 24
+                                                radius: 5
                                                 color: "#26354c"
                                                 visible: !iconImg.visible
 
                                                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                                                     text: (modelData.appId || modelData.title || "?").substring(0, 1).toUpperCase()
                                                     color: "#abc7ff"
-                                                    font.pixelSize: 14}
+                                                    font.pixelSize: 12}
                                             }
 
                                             // Focus Indicator Dot
@@ -566,7 +635,7 @@ PanelWindow {
                                                     right: parent.right
                                                     top: parent.top
                                                     bottom: parent.bottom
-                                                    topMargin: -10
+                                                    topMargin: -4
                                                 }
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
@@ -605,6 +674,7 @@ PanelWindow {
                                                     var point = appMouse.mapToItem(appCard, mouse.x, mouse.y)
                                                     if (point.x >= appCard.width - 18 && point.y >= -10 && point.y <= 8) {
                                                         switcherWindow.service.closeWindow(modelData)
+                                                        switcherWindow.service.closeSwitcher(true)
                                                     } else {
                                                         switcherWindow.service.focusWindow(modelData)
                                                     }
@@ -626,11 +696,11 @@ PanelWindow {
                                             Rectangle {
                                                 id: closeAppButton
                                                 z: 2
-                                                width: 18
-                                                height: 18
+                                                width: 16
+                                                height: 16
                                                 anchors.top: parent.top
                                                 anchors.right: parent.right
-                                                anchors.topMargin: -10
+                                                anchors.topMargin: -4
                                                 radius: 5
                                                 visible: appMouse.containsMouse
                                                 color: appMouse.containsMouse ? "#a83245" : "#71303d"
@@ -640,7 +710,7 @@ PanelWindow {
                                                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                                                     text: "×"
                                                     color: "#ffffff"
-                                                    font.pixelSize: 15}
+                                                    font.pixelSize: 13}
 
                                             }
 
@@ -821,9 +891,7 @@ PanelWindow {
                             ? "Unpin from launcher" : "Pin to launcher",
                         action: "toggle-pin"
                     },
-                    { label: "Focus window", action: "focus" },
                     { label: "Launch another instance", action: "launch" },
-                    { label: "Close window", action: "close" },
                     { label: "Close all windows from this app", action: "close-all" }
                 ]
 
@@ -851,30 +919,6 @@ PanelWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: switcherWindow.invokeAppContextAction(modelData.action)
                     }
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                radius: 6
-                color: fullscreenMenuMouse.containsMouse ? "#273650" : "transparent"
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    spacing: 8
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "⛶"; color: "#dce5f2"; font.pixelSize: 14 }
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Toggle fullscreen"; color: fullscreenMenuMouse.containsMouse ? "#abc7ff" : "#dce5f2"; font.pixelSize: 11 }
-                }
-
-                MouseArea {
-                    id: fullscreenMenuMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: switcherWindow.invokeAppContextAction("fullscreen")
                 }
             }
         }

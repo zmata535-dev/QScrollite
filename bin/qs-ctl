@@ -161,7 +161,7 @@ case "$cmd" in
             exit 0
         fi
         echo "Starting quickshell..."
-        nohup quickshell >/dev/null 2>&1 &
+        nohup env QT_QPA_PLATFORMTHEME=gtk3 quickshell >/dev/null 2>&1 &
         sleep 0.5
         if pgrep -x quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
             echo "Quickshell started successfully."

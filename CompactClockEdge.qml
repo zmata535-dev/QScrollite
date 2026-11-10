@@ -29,9 +29,20 @@ PanelWindow {
         width: parent.width * 0.10
         height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: edge.service.compactClockOpen
+            ? Qt.LeftButton | Qt.RightButton
+            : Qt.NoButton
         hoverEnabled: true
         onEntered: edge.service.showCompactClockFromEdge()
         onExited: edge.service.closeCompactClock()
+        onPressed: function(mouse) {
+            if (!edge.service.compactClockOpen) return
+            if (mouse.button === Qt.LeftButton) {
+                edge.service.closeCompactClock()
+                edge.service.openCalendar()
+            } else {
+                edge.service.closeCompactClock()
+            }
+        }
     }
 }
