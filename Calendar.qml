@@ -24,6 +24,13 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-calendar"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
+    readonly property bool pairedWithNotifications: service.notificationService
+        ? service.notificationService.notificationCenterOpen : false
+    readonly property real pairedCalendarWidth: Math.min(388, (root.width - 48) * 0.38)
+    readonly property real pairedNotificationWidth: Math.min(560, (root.width - 48) * 0.56)
+    property var pairedInputRegion: Region { item: card }
+    mask: pairedWithNotifications ? pairedInputRegion : null
+
     property var monthDate: {
         var now = new Date()
         return new Date(now.getFullYear(), now.getMonth(), 1)
@@ -68,7 +75,10 @@ PanelWindow {
     }
 
     function closeCalendar() {
+        var closePairedCenter = pairedWithNotifications
         service.calendarOpen = false
+        if (closePairedCenter && service.notificationService)
+            service.notificationService.closeCenter()
     }
 
     onMonthDateChanged: rebuildDays()
@@ -84,7 +94,7 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#99080c16"
+            color: root.pairedWithNotifications ? "transparent" : "#35080c16"
 
             MouseArea {
                 anchors.fill: parent
@@ -96,10 +106,14 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.min(388, root.width - 32)
+            width: root.pairedWithNotifications
+                ? root.pairedCalendarWidth : Math.min(388, root.width - 32)
             height: calendarColumn.implicitHeight + 36
-            anchors.centerIn: parent
-            radius: 16
+            x: root.pairedWithNotifications
+                ? (root.width - root.pairedCalendarWidth - 14 - root.pairedNotificationWidth) / 2
+                : (root.width - width) / 2
+            anchors.verticalCenter: parent.verticalCenter
+            radius: 14
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1

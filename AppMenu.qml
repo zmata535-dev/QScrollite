@@ -115,7 +115,7 @@ PanelWindow {
     function runCommand() {
         var command = filterText.trim()
         if (!command) return
-        Quickshell.execDetached(["bash", "-lc", command])
+        Quickshell.execDetached(["sakura", "--hold", "-e", "bash", "-lc", command])
         closeMenu()
     }
 
@@ -172,7 +172,7 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#99080c16"
+            color: "#35080c16"
 
             MouseArea {
                 anchors.fill: parent
@@ -191,7 +191,7 @@ PanelWindow {
             width: Math.min(520, root.width - 32)
             height: Math.min(content.implicitHeight + 32, root.height - 64)
             anchors.centerIn: parent
-            radius: 16
+            radius: 14
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
@@ -245,8 +245,16 @@ PanelWindow {
                         } else if (event.key === Qt.Key_PageUp) {
                             root.moveSelection(-8)
                             event.accepted = true
+                        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) &&
+                                   (event.modifiers & Qt.AltModifier)) {
+                            root.runCommand()
+                            event.accepted = true
                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            if (root.menuRows.length) root.activate(root.menuRows[root.selectedIndex])
+                            if (root.matches.length === 0) {
+                                root.runCommand()
+                            } else if (root.menuRows.length) {
+                                root.activate(root.menuRows[root.selectedIndex])
+                            }
                             event.accepted = true
                         }
                     }

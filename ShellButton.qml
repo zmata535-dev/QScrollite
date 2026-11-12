@@ -15,7 +15,7 @@ Button {
 
     background: Rectangle {
         radius: 6
-        color: !root.enabled ? "#141922"
+        color: !root.enabled ? "#161d2a"
             : (root.down ? (root.danger ? "#3b1e28" : "#1d2a3e")
             : (root.hovered ? (root.danger ? "#3b1e28" : "#273650")
             : (root.accent || root.selected ? "#22334f" : "#161d2a")))

@@ -1,5 +1,7 @@
 {
     "pinnedApps": [
-        "sakura.desktop"
+        "sakura.desktop",
+        "nemo.desktop",
+        "helium.desktop"
     ]
 }

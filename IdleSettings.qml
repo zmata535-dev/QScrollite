@@ -34,7 +34,7 @@ PanelWindow {
     property bool clockPreviewColonVisible: true
 
     Timer {
-        interval: 500
+        interval: 2000
         repeat: true
         running: root.clockPreviewVisible
         onTriggered: {
@@ -107,7 +107,7 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#99080c16"
+            color: "#35080c16"
 
             MouseArea {
                 anchors.fill: parent
@@ -130,7 +130,7 @@ PanelWindow {
             y: (root.height - height) / 2 - ((root.height + height) / 2) * root.clockPreviewSlideProgress
             width: Math.min(442, Math.max(204, (root.width - card.width - 64) * 0.85))
             height: 212
-            radius: 18
+            radius: 14
             visible: root.clockPreviewVisible
             opacity: 1 - Math.max(root.clockPreviewFractureProgress, root.clockPreviewSlideProgress)
             scale: 1 - root.clockPreviewSlideProgress * 0.82
@@ -204,7 +204,7 @@ font.pixelSize: 17
                 ? Math.max(16, (root.width - width - clockPreviewCard.width - 24) / 2)
                 : (root.width - width) / 2
             y: (root.height - height) / 2
-            radius: 16
+            radius: 14
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
@@ -226,6 +226,14 @@ font.pixelSize: 17
                         text: "Idle timer settings"
                         color: "#e2e8f0"
                         font.pixelSize: 14}
+
+                    ShellButton {
+                        font.pixelSize: 10
+                        text: root.service.idleApplyProcess.running ? "Applying…" : "Apply"
+                        accent: true
+                        enabled: !root.service.idleApplyProcess.running
+                        onClicked: root.service.applyIdleSettings()
+                    }
 
                     Rectangle {
                         implicitWidth: 24
@@ -257,31 +265,52 @@ font.pixelSize: 17
                     columnSpacing: 8
                     rowSpacing: 4
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Show compact clock"; color: "#dce5f2"; font.pixelSize: 10 }
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Compact clock on idle"
+                        checked: root.service.compactClockEnabled
+                        onToggled: root.service.compactClockEnabled = checked
+                    }
                     ShellSpinBox {
                         implicitHeight: 20
                         font.pixelSize: 9
                         Layout.fillWidth: true
+                        enabled: root.service.compactClockEnabled
                         from: 1; to: 3600; editable: true
                         value: root.service.compactClockTimeout
                         onValueModified: root.service.compactClockTimeout = value
                     }
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Show full clock card"; color: "#dce5f2"; font.pixelSize: 10 }
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Clock card on idle"
+                        checked: root.service.clockCardEnabled
+                        onToggled: root.service.clockCardEnabled = checked
+                    }
                     ShellSpinBox {
                         implicitHeight: 20
                         font.pixelSize: 9
                         Layout.fillWidth: true
+                        enabled: root.service.clockCardEnabled
                         from: 1; to: 3600; editable: true
                         value: root.service.idleClockTimeout
                         onValueModified: root.service.idleClockTimeout = value
                     }
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Dim display to 10%"; color: "#dce5f2"; font.pixelSize: 10 }
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Dim display on idle"
+                        checked: root.service.dimDisplayEnabled
+                        onToggled: root.service.dimDisplayEnabled = checked
+                    }
                     ShellSpinBox {
                         implicitHeight: 20
                         font.pixelSize: 9
                         Layout.fillWidth: true
+                        enabled: root.service.dimDisplayEnabled
                         from: 1; to: 3600; editable: true
                         value: root.service.idleDimTimeout
                         onValueModified: root.service.idleDimTimeout = value
@@ -305,6 +334,29 @@ font.pixelSize: 17
                         from: 1; to: 3600; editable: true
                         value: root.service.idleLockTimeout
                         onValueModified: root.service.idleLockTimeout = value
+                    }
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Empty workspace"; color: "#dce5f2"; font.pixelSize: 10 }
+                    ShellComboBox {
+                        id: emptyWorkspaceActionBox
+                        Layout.fillWidth: true
+                        font.pixelSize: 9
+                        model: ["Nothing", "Clock card", "AppSwitcher"]
+                        currentIndex: root.service.emptyWorkspaceAction === "clock" ? 1
+                            : (root.service.emptyWorkspaceAction === "switcher" ? 2 : 0)
+                        onActivated: function(index) {
+                            root.service.emptyWorkspaceAction = ["none", "clock", "switcher"][index]
+                        }
+                    }
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Notification timeout (s)"; color: "#dce5f2"; font.pixelSize: 10 }
+                    ShellSpinBox {
+                        implicitHeight: 20
+                        font.pixelSize: 9
+                        Layout.fillWidth: true
+                        from: 1; to: 3600; editable: true
+                        value: root.service.notificationService.timeoutSeconds
+                        onValueModified: root.service.notificationService.setTimeoutSeconds(value)
                     }
                 }
 
@@ -334,6 +386,13 @@ font.pixelSize: 17
                             }
                         }
                     }
+                }
+
+                ShellCheckBox {
+                    font.pixelSize: 10
+                    text: "Show Quickshell RSS in AppSwitcher"
+                    checked: root.service.showRssUsage
+                    onToggled: root.service.showRssUsage = checked
                 }
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#283448" }
@@ -515,15 +574,6 @@ font.pixelSize: 17
                         color: root.service.idleApplyStatus.indexOf("Could not") === 0 ? "#ffb4ab" : "#94a3b8"
                         font.pixelSize: 9
                         elide: Text.ElideRight
-                    }
-
-                    ShellButton {
-
-                        font.pixelSize: 10
-                        text: "Apply"
-                        accent: true
-                        enabled: !root.service.idleApplyProcess.running
-                        onClicked: root.service.applyIdleSettings()
                     }
                 }
             }

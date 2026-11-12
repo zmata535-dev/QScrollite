@@ -22,7 +22,7 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-polkit"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-    color: "#aa080a12"
+    color: "#35080c16"
 
     property alias agent: polkitAgent
     readonly property var currentFlow: polkitAgent.flow
@@ -153,7 +153,7 @@ PanelWindow {
         anchors.centerIn: parent
         transform: Translate { x: modalBox.shakeOffset }
         radius: 14
-        color: "#141622"
+        color: "#111722"
         border.color: "#3b4a63"
         border.width: 1
 
@@ -177,7 +177,7 @@ PanelWindow {
             anchors.margins: 20
             spacing: 12
 
-            ComboBox {
+            ShellComboBox {
                 id: identitySelector
                 Layout.fillWidth: true
                 visible: Boolean(currentFlow && currentFlow.identities && currentFlow.identities.length > 1)
@@ -188,22 +188,6 @@ PanelWindow {
                 onActivated: function(index) {
                     if (currentFlow && currentFlow.identities[index])
                         currentFlow.selectedIdentity = currentFlow.identities[index]
-                }
-                contentItem: Text {
-                    leftPadding: 10
-                    text: identitySelector.displayText
-                    color: "#dce5f2"
-                    font.family: "JetBrainsMono Nerd Font Mono"
-                    font.weight: Font.Light
-                    font.pixelSize: 12
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
-                }
-                background: Rectangle {
-                    radius: 6
-                    color: "#161d2a"
-                    border.width: 1
-                    border.color: identitySelector.activeFocus ? "#abc7ff" : "#2b364a"
                 }
             }
 

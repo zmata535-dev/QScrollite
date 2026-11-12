@@ -15,6 +15,9 @@ settings_path = home / ".config/quickshell/idle-settings.json"
 config_path = home / ".config/hypr/hypridle.conf"
 defaults = {
     "compactClockTimeout": 3,
+    "compactClockEnabled": True,
+    "clockCardEnabled": True,
+    "dimDisplayEnabled": True,
     "clockTimeout": 9,
     "dimTimeout": 15,
     "displayOffTimeout": 21,
@@ -35,12 +38,37 @@ def bounded_int(key, minimum, maximum):
         return defaults[key]
 
 
+def boolean_setting(key):
+    value = settings.get(key, defaults[key])
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 try:
     settings = {**defaults, **json.loads(settings_path.read_text())}
 except (OSError, json.JSONDecodeError):
     settings = defaults.copy()
 
-if len(sys.argv) == 10:
+if len(sys.argv) == 13:
+    keys = (
+        "compactClockTimeout",
+        "clockTimeout",
+        "dimTimeout",
+        "displayOffTimeout",
+        "lockTimeout",
+        "compactClockEnabled",
+        "clockCardEnabled",
+        "dimDisplayEnabled",
+        "clockTextColor",
+        "clockTextSize",
+        "compactClockTextSize",
+        "iconTheme",
+    )
+    settings.update(zip(keys, sys.argv[1:]))
+elif len(sys.argv) == 10:
     keys = (
         "compactClockTimeout",
         "clockTimeout",
@@ -102,6 +130,9 @@ if clock_shatter_animation and clock_slide_animation:
 clock_color = str(settings.get("clockTextColor", defaults["clockTextColor"]))
 if not re.fullmatch(r"#[0-9a-fA-F]{6}", clock_color):
     clock_color = defaults["clockTextColor"]
+compact_clock_enabled = boolean_setting("compactClockEnabled")
+clock_card_enabled = boolean_setting("clockCardEnabled")
+dim_display_enabled = boolean_setting("dimDisplayEnabled")
 icon_theme = str(settings.get("iconTheme", defaults["iconTheme"])).strip()
 if not re.fullmatch(r"[A-Za-z0-9._ +()-]+", icon_theme):
     icon_theme = defaults["iconTheme"]
@@ -113,6 +144,9 @@ settings.update(
     dimTimeout=dim,
     displayOffTimeout=display_off,
     lockTimeout=lock,
+    compactClockEnabled=compact_clock_enabled,
+    clockCardEnabled=clock_card_enabled,
+    dimDisplayEnabled=dim_display_enabled,
     clockTextColor=clock_color,
     iconTheme=icon_theme,
     clockTextSize=clock_size,
@@ -161,32 +195,38 @@ set_ini_value(home / ".config/gtk-3.0/settings.ini", "Settings", "gtk-icon-theme
 set_ini_value(home / ".config/gtk-4.0/settings.ini", "Settings", "gtk-icon-theme-name", icon_theme)
 set_ini_value(home / ".config/qt6ct/qt6ct.conf", "Appearance", "icon_theme", icon_theme)
 
+idle_listeners = []
+if compact_clock_enabled:
+    idle_listeners.append(f'''listener {{
+    timeout = {compact_clock}
+    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
+    on-timeout = qs ipc call clock compact
+    on-resume = qs ipc call clock activity
+}}
+''')
+if clock_card_enabled:
+    idle_listeners.append(f'''listener {{
+    timeout = {clock}
+    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
+    on-timeout = qs ipc call clock open
+    on-resume = qs ipc call clock activity
+}}
+''')
+if dim_display_enabled:
+    idle_listeners.append(f'''listener {{
+    timeout = {dim}
+    on-timeout = brightnessctl -s set 10%
+    on-resume = brightnessctl -r
+}}
+''')
+
 config = f'''general {{
     lock_cmd = pidof hyprlock || hyprlock
     before_sleep_cmd = loginctl lock-session
     after_sleep_cmd = hyprctl dispatch 'hl.dsp.dpms({{ action = "enable" }})' && brightnessctl -r
 }}
 
-listener {{
-    timeout = {compact_clock}
-    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
-    on-timeout = qs ipc call clock compact
-    on-resume = qs ipc call clock activity
-}}
-
-listener {{
-    timeout = {clock}
-    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
-    on-timeout = qs ipc call clock open
-    on-resume = qs ipc call clock activity
-}}
-
-listener {{
-    timeout = {dim}
-    on-timeout = brightnessctl -s set 10%
-    on-resume = brightnessctl -r
-}}
-
+{''.join(idle_listeners)}
 listener {{
     timeout = {display_off}
     on-timeout = hyprctl dispatch 'hl.dsp.dpms({{ action = "disable" }})'
@@ -223,5 +263,7 @@ try:
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+    if not dim_display_enabled:
+        subprocess.run(["brightnessctl", "-r"], check=False)
 except FileNotFoundError:
     pass

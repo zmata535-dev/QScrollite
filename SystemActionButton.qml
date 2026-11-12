@@ -37,9 +37,11 @@ Item {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.service.runSystemAction(root.action)
-            ToolTip.visible: containsMouse
-            ToolTip.delay: 600
-            ToolTip.text: root.action.charAt(0).toUpperCase() + root.action.slice(1)
+            ShellToolTip {
+                parent: mouse
+                visible: mouse.containsMouse
+                text: root.action.charAt(0).toUpperCase() + root.action.slice(1)
+            }
         }
     }
 }

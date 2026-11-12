@@ -27,11 +27,29 @@ PanelWindow {
     // hover tracking while the compact clock is visible.
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-compact-clock"
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
+    mask: Region {
+        Region { item: compactCard }
+        Region { item: clockButton }
+        Region { item: notificationBadge }
+    }
 
     property var now: new Date()
     property bool colonVisible: true
     property real slideY: -18
+
+    function openClockDestination() {
+        root.service.closeCompactClock()
+        openDestinationTimer.restart()
+    }
+
+    Timer {
+        id: openDestinationTimer
+        interval: 180
+        repeat: false
+        onTriggered: root.service.openCalendarFromCompactClock()
+    }
 
     NumberAnimation {
         id: slideIn
@@ -83,7 +101,7 @@ PanelWindow {
     Component.onCompleted: slideIn.start()
 
     Timer {
-        interval: 500
+        interval: 2000
         repeat: true
         running: root.visible
         onTriggered: {
@@ -94,15 +112,6 @@ PanelWindow {
 
     Item {
         anchors.fill: parent
-
-        MouseArea {
-            id: activityArea
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.AllButtons
-            onPressed: root.service.closeCompactClock()
-            onWheel: root.service.closeCompactClock()
-        }
 
         GlowBorder {
             targetItem: compactCard
@@ -122,12 +131,45 @@ PanelWindow {
 
         }
 
+        Rectangle {
+            id: notificationBadge
+            visible: root.service.unreadNotificationCount > 0
+            x: compactCard.x + compactCard.width - 3
+            y: compactCard.y - 3
+            z: 14
+            width: root.service.unreadNotificationCount > 9 ? 17 : 10
+            height: 10
+            radius: 5
+            color: "#ef6478"
+            border.color: "#111622"
+            border.width: 1
+            Text {
+                anchors.centerIn: parent
+                visible: root.service.unreadNotificationCount > 9
+                text: root.service.unreadNotificationCount > 99 ? "99+" : String(root.service.unreadNotificationCount)
+                color: "#111622"
+                font.family: "JetBrainsMono Nerd Font Mono"
+                font.pixelSize: 7
+                font.bold: true
+            }
+            ShellToolTip {
+                parent: notificationBadgeMouse
+                visible: notificationBadgeMouse.containsMouse
+                text: root.service.unreadNotificationCount + " unread notification" + (root.service.unreadNotificationCount === 1 ? "" : "s")
+            }
+            MouseArea {
+                id: notificationBadgeMouse
+                anchors.fill: parent
+                hoverEnabled: true
+            }
+        }
+
         Button {
             id: clockButton
-            x: compactCard.x + (compactCard.width - width) / 2
-            y: Math.max(0, compactCard.y + (compactCard.height - height) / 2)
-            width: Math.max(compactCard.width, clockButtonText.implicitWidth) + 36
-            height: Math.max(compactCard.height, clockButtonText.implicitHeight) + 36
+            x: compactCard.x
+            y: compactCard.y
+            width: compactCard.width
+            height: compactCard.height
             z: 11
             padding: 0
             text: Qt.formatDateTime(root.now, "HH") + (root.colonVisible ? ":" : " ") + Qt.formatDateTime(root.now, "mm")
@@ -145,11 +187,6 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
-            onClicked: {
-                root.service.closeCompactClock()
-                root.service.openCalendar()
-            }
-
         }
 
         MouseArea {
@@ -167,10 +204,9 @@ PanelWindow {
                     root.service.closeCompactClock()
                 }
             }
-            onPressed: function(mouse) {
+            onClicked: function(mouse) {
                 if (mouse.button === Qt.LeftButton) {
-                    root.service.closeCompactClock()
-                    root.service.openCalendar()
+                    root.openClockDestination()
                 } else {
                     root.service.closeCompactClock()
                 }

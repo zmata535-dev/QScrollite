@@ -94,7 +94,7 @@ PanelWindow {
     }
 
     Timer {
-        interval: 500
+        interval: 2000
         repeat: true
         running: root.visible
         onTriggered: {
@@ -115,7 +115,7 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "#99080c16"
+            color: "#35080c16"
             opacity: 1 - root.closeFade
 
             MouseArea {
@@ -141,7 +141,7 @@ PanelWindow {
             width: Math.min(369, (root.width - 32) * 0.69)
             height: 212
             anchors.centerIn: parent
-            radius: 18
+            radius: 14
             color: Qt.rgba(17 / 255, 23 / 255, 34 / 255, root.service.clockCardBackgroundOpacity / 100)
             border.color: "#3b4a63"
             border.width: 1
@@ -198,12 +198,39 @@ horizontalAlignment: Text.AlignLeft
                     }
                 }
 
-                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
+                RowLayout {
+                    Layout.fillWidth: true
                     Layout.bottomMargin: 14
-                    text: root.dateLabel
-                    color: "#94a3b8"
-font.pixelSize: 17
-                    horizontalAlignment: Text.AlignHCenter
+                    spacing: 8
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.dateLabel
+                        color: "#94a3b8"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.weight: Font.Light
+                        font.pixelSize: 17
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    RowLayout {
+                        visible: root.service.unreadNotificationCount > 0
+                        spacing: 4
+
+                        Text {
+                            text: "󰂚"
+                            color: "#c0c0d8"
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.pixelSize: 17
+                        }
+
+                        Text {
+                            text: String(root.service.unreadNotificationCount)
+                            color: "#c0c0d8"
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.pixelSize: 13
+                        }
+                    }
                 }
             }
         }

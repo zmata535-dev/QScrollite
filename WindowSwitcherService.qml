@@ -6,7 +6,10 @@ QtObject {
     id: service
 
     property var wallpaperService: null
+    property var notificationService: null
+    property var pendingNotificationSender: null
     property bool open: false
+    property string switcherPlacement: "top-left"
     property bool appSwitcherHovered: false
     property bool appSwitcherClosePending: false
     property bool appMenuOpen: false
@@ -24,6 +27,22 @@ QtObject {
     property string idleApplyStatus: ""
     property alias idleClockTimeout: idleSettings.clockTimeout
     property alias compactClockTimeout: idleSettings.compactClockTimeout
+    property alias compactClockEnabled: idleSettings.compactClockEnabled
+    property alias clockCardEnabled: idleSettings.clockCardEnabled
+    property alias dimDisplayEnabled: idleSettings.dimDisplayEnabled
+    onCompactClockEnabledChanged: {
+        if (!compactClockEnabled) {
+            compactClockOpenTimer.stop();
+            compactClockPending = false;
+            closeCompactClock();
+        }
+    }
+    onClockCardEnabledChanged: {
+        if (!clockCardEnabled) {
+            clockOpenTimer.stop();
+            if (clockOpen) requestClockClose();
+        }
+    }
     property alias idleDimTimeout: idleSettings.dimTimeout
     property alias idleDisplayOffTimeout: idleSettings.displayOffTimeout
     property alias idleLockTimeout: idleSettings.lockTimeout
@@ -34,6 +53,9 @@ QtObject {
     property alias clockCardBackgroundOpacity: idleSettings.clockCardBackgroundOpacity
     property alias clockShatterAnimationEnabled: idleSettings.clockShatterAnimationEnabled
     property alias clockSlideAnimationEnabled: idleSettings.clockSlideAnimationEnabled
+    property alias showRssUsage: idleSettings.showRssUsage
+    property alias emptyWorkspaceAction: idleSettings.emptyWorkspaceAction
+    onEmptyWorkspaceActionChanged: lastEmptyWorkspaceKey = ""
     property alias pinnedApps: pinnedAppsStore.pinnedApps
     property alias columnWidthSmall: idleSettings.columnWidthSmall
     property alias columnWidthMedium: idleSettings.columnWidthMedium
@@ -43,7 +65,12 @@ QtObject {
     property var hoveredWindow: null
     property string activeCompositor: "hyprland"
     property string activeWindowId: ""
+    property string activeWorkspaceId: ""
+    property string lastEmptyWorkspaceKey: ""
     property bool isRefreshing: false
+
+    readonly property int unreadNotificationCount: notificationService ? notificationService.unread.length : 0
+    readonly property bool doNotDisturb: notificationService ? notificationService.doNotDisturb : false
 
     property var idleSettingsFile: FileView {
         id: idleSettingsFile
@@ -61,6 +88,9 @@ QtObject {
             id: idleSettings
             property int clockTimeout: 9
             property int compactClockTimeout: 3
+            property bool compactClockEnabled: true
+            property bool clockCardEnabled: true
+            property bool dimDisplayEnabled: true
             property int dimTimeout: 15
             property int displayOffTimeout: 21
             property int lockTimeout: 26
@@ -71,6 +101,8 @@ QtObject {
             property int clockCardBackgroundOpacity: 100
             property bool clockShatterAnimationEnabled: true
             property bool clockSlideAnimationEnabled: false
+            property bool showRssUsage: false
+            property string emptyWorkspaceAction: "none"
             property int columnWidthSmall: 50
             property int columnWidthMedium: 69
             property int columnWidthLarge: 92
@@ -173,7 +205,7 @@ QtObject {
             if (service.activeCompositor === "niri") {
                 return ["bash", "-c", "niri msg -j windows 2>/dev/null; echo '---SPLIT---'; niri msg -j workspaces 2>/dev/null"];
             } else {
-                return ["bash", "-c", "hyprctl -j clients 2>/dev/null; echo '---SPLIT---'; hyprctl -j activewindow 2>/dev/null"];
+                return ["bash", "-c", "hyprctl -j clients 2>/dev/null; echo '---SPLIT---'; hyprctl -j activewindow 2>/dev/null; echo '---ACTIVEWS---'; hyprctl -j activeworkspace 2>/dev/null"];
             }
         }
         running: false
@@ -193,7 +225,8 @@ QtObject {
                     if (service.activeCompositor === "niri") {
                         parseNiri(rawClients, rawExtra);
                     } else {
-                        parseHyprland(rawClients, rawExtra);
+                        var hyprParts = rawExtra.split("---ACTIVEWS---");
+                        parseHyprland(rawClients, hyprParts[0] || "", hyprParts[1] || "");
                     }
                 } catch(e) {
                     console.log("[WindowSwitcher] Error parsing windows:", e);
@@ -203,7 +236,7 @@ QtObject {
         }
     }
 
-    function parseHyprland(clientsJson, activeJson) {
+    function parseHyprland(clientsJson, activeJson, activeWorkspaceJson) {
         if (!clientsJson) return;
         var clients = JSON.parse(clientsJson);
         var activeAddr = "";
@@ -215,6 +248,17 @@ QtObject {
         } catch(e) {}
 
         service.activeWindowId = activeAddr;
+        var activeWorkspace = activeWorkspaceJson ? JSON.parse(activeWorkspaceJson) : {};
+        service.activeWorkspaceId = activeWorkspace.id !== undefined ? String(activeWorkspace.id) : "";
+        var activeWorkspaceWindowCount = 0;
+        if (service.activeWorkspaceId) {
+            for (var activeIndex = 0; activeIndex < clients.length; activeIndex++) {
+                var clientWorkspace = clients[activeIndex].workspace;
+                if (clientWorkspace && String(clientWorkspace.id) === service.activeWorkspaceId)
+                    activeWorkspaceWindowCount++;
+            }
+            updateEmptyWorkspaceAction(activeWorkspaceWindowCount === 0);
+        }
 
         var wsMap = {};
         for (var i = 0; i < clients.length; i++) {
@@ -274,6 +318,24 @@ QtObject {
     function parseNiri(windowsJson, workspacesJson) {
         if (!windowsJson) return;
         var windows = JSON.parse(windowsJson);
+        var focusedWorkspaceId = "";
+        var workspaces = workspacesJson ? JSON.parse(workspacesJson) : [];
+        for (var workspaceIndex = 0; workspaceIndex < workspaces.length; workspaceIndex++) {
+            if (workspaces[workspaceIndex].is_focused) {
+                focusedWorkspaceId = String(workspaces[workspaceIndex].id);
+                break;
+            }
+        }
+        service.activeWorkspaceId = focusedWorkspaceId;
+        service.activeWindowId = "";
+        var focusedWorkspaceWindowCount = 0;
+        for (var windowIndex = 0; windowIndex < windows.length; windowIndex++) {
+            if (String(windows[windowIndex].workspace_id) === focusedWorkspaceId)
+                focusedWorkspaceWindowCount++;
+        }
+        if (focusedWorkspaceId)
+            updateEmptyWorkspaceAction(focusedWorkspaceWindowCount === 0);
+
         var wsMap = {};
 
         for (var i = 0; i < windows.length; i++) {
@@ -348,6 +410,27 @@ QtObject {
         fetchProc.running = true;
     }
 
+    function updateEmptyWorkspaceAction(isEmpty) {
+        if (!activeWorkspaceId) return;
+        if (!isEmpty) {
+            lastEmptyWorkspaceKey = "";
+            return;
+        }
+
+        var key = activeCompositor + ":" + activeWorkspaceId;
+        if (lastEmptyWorkspaceKey === key) return;
+        lastEmptyWorkspaceKey = key;
+
+        if (open || appMenuOpen || appMenuPending || calendarOpen || calendarPending ||
+                clockOpen || idleConfigOpen || compactClockOpen || compactClockPending)
+            return;
+
+        if (emptyWorkspaceAction === "clock")
+            openClock();
+        else if (emptyWorkspaceAction === "switcher")
+            openSwitcher();
+    }
+
     // Auto-refresh timer while switcher is open
     property var liveTimer: Timer {
         interval: 500
@@ -358,8 +441,18 @@ QtObject {
         }
     }
 
-    function openSwitcher() {
+    property var workspaceMonitorTimer: Timer {
+        interval: 1000
+        repeat: true
+        running: true
+        onTriggered: service.refresh()
+    }
+
+    function openSwitcher(placement) {
+        switcherPlacement = placement === "bottom-center" ? "bottom-center" : "top-left";
         cancelCompactClockForAppPanels();
+        appSwitcherHovered = false;
+        appSwitcherClosePending = false;
         detectCompositor();
         workspaces = [];
         activeWindowId = "";
@@ -402,6 +495,63 @@ QtObject {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + win.id + "\" })"]);
         }
         closeSwitcher(true);
+    }
+
+    function focusNotificationSender(notification) {
+        if (!notification) return;
+        pendingNotificationSender = {
+            desktopEntry: String(notification.desktopEntry || ""),
+            appName: String(notification.appName || "")
+        };
+        refresh();
+        notificationFocusTimer.restart();
+    }
+
+    function resolveNotificationSender(notification) {
+        if (!notification) return;
+        var senderId = String(notification.desktopEntry || "").toLowerCase();
+        var senderName = String(notification.appName || "").toLowerCase();
+        var normalizedSender = senderId.endsWith(".desktop") ? senderId : senderId + ".desktop";
+        var match = null;
+        for (var i = 0; i < workspaces.length && !match; i++) {
+            var windows = workspaces[i].windows || [];
+            for (var j = 0; j < windows.length; j++) {
+                var win = windows[j];
+                var app = String(win.appId || "").toLowerCase();
+                var entry = appEntryForWindow(win);
+                var entryId = entry ? normalizedDesktopEntryId(entry.id).toLowerCase() : "";
+                if ((normalizedSender !== ".desktop" && (entryId === normalizedSender || app === senderId || app + ".desktop" === normalizedSender)) ||
+                    (senderName && (app === senderName || String(win.title || "").toLowerCase() === senderName))) {
+                    match = win;
+                    break;
+                }
+            }
+        }
+        if (match) {
+            focusWindow(match);
+            return;
+        }
+
+        var launchId = senderId;
+        if (!launchId && senderName) {
+            var senderEntry = null;
+            try { senderEntry = DesktopEntries.heuristicLookup(senderName); } catch (e) {}
+            if (senderEntry && senderEntry.id) launchId = String(senderEntry.id);
+        }
+        if (launchId) {
+            if (!launchId.endsWith(".desktop")) launchId += ".desktop";
+            Quickshell.execDetached(["gtk-launch", launchId]);
+        }
+    }
+
+    property var notificationFocusTimer: Timer {
+        interval: 650
+        repeat: false
+        onTriggered: {
+            var pending = service.pendingNotificationSender;
+            service.pendingNotificationSender = null;
+            service.resolveNotificationSender(pending);
+        }
     }
 
     function closeWindow(win) {
@@ -619,7 +769,16 @@ QtObject {
         calendarTimer.restart();
     }
 
+    function openCalendarFromCompactClock() {
+        closeSwitcher();
+        calendarPending = true;
+        if (unreadNotificationCount > 0 && notificationService)
+            notificationService.openCenter();
+        calendarTimer.restart();
+    }
+
     function openClock() {
+        if (!clockCardEnabled) return;
         compactClockOpenTimer.stop();
         compactClockPending = false;
         closeCompactClock(true);
@@ -663,6 +822,7 @@ QtObject {
     }
 
     function requestCompactClock() {
+        if (!compactClockEnabled) return;
         if (open || appMenuOpen || appMenuPending) {
             compactClockOpenTimer.stop();
             compactClockPending = false;
@@ -742,6 +902,9 @@ QtObject {
                 idleDimTimeout.toString(),
                 idleDisplayOffTimeout.toString(),
                 idleLockTimeout.toString(),
+                compactClockEnabled.toString(),
+                clockCardEnabled.toString(),
+                dimDisplayEnabled.toString(),
                 idleClockTextColor,
                 idleClockTextSize.toString(),
                 compactClockTextSize.toString(),
@@ -801,5 +964,6 @@ QtObject {
 
     Component.onCompleted: {
         detectCompositor();
+        refresh();
     }
 }

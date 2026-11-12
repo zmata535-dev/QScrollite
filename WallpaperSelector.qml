@@ -24,7 +24,7 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-wallpaper-picker"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
-    color: "#aa080a12"
+    color: "#35080c16"
 
     property string searchQuery: ""
 
@@ -97,8 +97,8 @@ PanelWindow {
         anchors.centerIn: parent
         width: Math.min(parent.width - 60, 1000)
         height: Math.min(parent.height - 60, 680)
-        color: "#141622"
-        radius: 18
+        color: "#111722"
+        radius: 14
         border.color: "#3b4a63"
         border.width: 1
 

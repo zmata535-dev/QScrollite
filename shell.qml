@@ -42,6 +42,28 @@ ShellRoot {
     WindowSwitcherService {
         id: switcherService
         wallpaperService: root.wallpaperService
+        notificationService: notifications
+    }
+
+    NotificationService {
+        id: notifications
+        switcherService: switcherService
+    }
+
+    LazyLoader {
+        active: notifications.toasts.length > 0
+
+        NotificationPopups {
+            service: notifications
+        }
+    }
+
+    LazyLoader {
+        active: notifications.notificationCenterOpen
+
+        NotificationCenter {
+            service: notifications
+        }
     }
 
     LazyLoader {
@@ -102,6 +124,13 @@ ShellRoot {
 
     Variants {
         model: Quickshell.screens
+        AppSwitcherEdge {
+            service: switcherService
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
         HotCornerBottomRight {
             service: hotCornerService
         }
@@ -125,6 +154,24 @@ ShellRoot {
         model: Quickshell.screens
         HotCornerTopLeft {
             service: hotCornerService
+        }
+    }
+
+    IpcHandler {
+        target: "notifications"
+
+        function status(): string {
+            return JSON.stringify({
+                unread: notifications.unreadCount,
+                visible: notifications.toasts.length,
+                doNotDisturb: notifications.doNotDisturb,
+                timeoutSeconds: notifications.timeoutSeconds
+            }, null, 2);
+        }
+
+        function toggleDnd(): string {
+            notifications.toggleDnd();
+            return notifications.doNotDisturb ? "Do Not Disturb on" : "Do Not Disturb off";
         }
     }
 
