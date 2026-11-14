@@ -31,6 +31,8 @@ QtObject {
     property bool appMenuOpen: false
     property bool appMenuPending: false
     property string appMenuInitialText: ""
+    property bool gDictCalcOpen: false
+    property string gDictCalcInitialQuery: ""
     property bool calendarOpen: false
     property bool calendarPending: false
     property bool clockOpen: false
@@ -468,7 +470,7 @@ QtObject {
         if (lastEmptyWorkspaceKey === key) return;
         lastEmptyWorkspaceKey = key;
 
-        if (open || appMenuOpen || appMenuPending || calendarOpen || calendarPending ||
+        if (open || appMenuOpen || appMenuPending || gDictCalcOpen || calendarOpen || calendarPending ||
                 clockOpen || idleConfigOpen || compactClockOpen || compactClockPending)
             return;
 
@@ -1106,7 +1108,7 @@ QtObject {
             if (service.compactClockOnMediaPlaying && service.hasPlayingMedia())
                 return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending ||
+            if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen ||
                     service.calendarOpen || service.calendarPending || service.idleConfigOpen ||
                     service.wallpaperToggleTimer.running || wallpaperOpen) {
                 restart();
@@ -1124,7 +1126,7 @@ QtObject {
         onTriggered: {
             if (!service.compactClockPending) return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.open || service.appMenuOpen || service.appMenuPending) {
+            if (service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen) {
                 service.compactClockPending = false;
                 return;
             }
@@ -1210,7 +1212,7 @@ QtObject {
 
     function requestCompactClock() {
         if (!compactClockEnabled) return;
-        if (open || appMenuOpen || appMenuPending) {
+        if (open || appMenuOpen || appMenuPending || gDictCalcOpen) {
             compactClockOpenTimer.stop();
             compactClockPending = false;
             return;
@@ -1354,6 +1356,16 @@ QtObject {
         } else {
             openAppMenu();
         }
+    }
+
+    function openGDictCalc(query) {
+        cancelCompactClockForAppPanels();
+        closeSwitcher(true);
+        gDictCalcInitialQuery = String(query || "");
+        appMenuTimer.stop();
+        appMenuPending = false;
+        appMenuOpen = false;
+        gDictCalcOpen = true;
     }
 
     Component.onCompleted: {

@@ -3,13 +3,14 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Services.Polkit
 
 PanelWindow {
     id: polkitWindow
 
+    required property var agent
+
     screen: Quickshell.screens[0]
-    visible: polkitAgent.isActive && polkitAgent.flow !== null
+    visible: agent.isActive && agent.flow !== null
 
     anchors {
         top: true
@@ -24,61 +25,81 @@ PanelWindow {
 
     color: "#35080c16"
 
-    property alias agent: polkitAgent
-    readonly property var currentFlow: polkitAgent.flow
+    readonly property var currentFlow: agent ? agent.flow : null
     property string authError: ""
     property bool isSubmitting: false
+    property var connectedFlow: null
+    property var supplementaryMessageHandler: null
+    property var failedHandler: null
+    property var responseRequiredHandler: null
 
-    PolkitAgent {
-        id: polkitAgent
+    Connections {
+        target: polkitWindow.agent
 
-        onIsRegisteredChanged: {
-            console.log("[PolkitAgent] Registered:", isRegistered);
-        }
-
-        onAuthenticationRequestStarted: {
-            console.log("[PolkitAgent] Request started. Action:", flow ? flow.actionId : "");
+        function onAuthenticationRequestStarted() {
             polkitWindow.authError = "";
             polkitWindow.isSubmitting = false;
             passwordInput.text = "";
         }
 
-        onFlowChanged: {
-            if (flow) {
-                flow.supplementaryMessageChanged.connect(function() {
-                    if (flow && flow.supplementaryMessage && flow.supplementaryMessage.trim() !== "") {
-                        polkitWindow.authError = flow.supplementaryMessage;
-                        if (flow.supplementaryIsError) {
-                            polkitWindow.triggerShake();
-                        }
-                    }
-                });
-
-                flow.failedChanged.connect(function() {
-                    if (flow && flow.failed) {
-                        polkitWindow.isSubmitting = false;
-                        polkitWindow.triggerShake();
-                        if (!polkitWindow.authError) {
-                            polkitWindow.authError = "Authentication failed. Please check your password.";
-                        }
-                        passwordInput.selectAll();
-                        passwordInput.forceActiveFocus();
-                    }
-                });
-
-                flow.isResponseRequiredChanged.connect(function() {
-                    if (flow && flow.isResponseRequired) {
-                        polkitWindow.isSubmitting = false;
-                        passwordInput.forceActiveFocus();
-                    }
-                });
-            } else {
-                polkitWindow.authError = "";
-                polkitWindow.isSubmitting = false;
-                passwordInput.text = "";
-            }
+        function onFlowChanged() {
+            polkitWindow.connectCurrentFlow()
         }
     }
+
+    function connectCurrentFlow() {
+        var flow = currentFlow
+        disconnectCurrentFlow()
+        if (!flow) {
+            authError = ""
+            isSubmitting = false
+            return
+        }
+        connectedFlow = flow
+
+        supplementaryMessageHandler = function() {
+            if (polkitWindow.currentFlow !== flow || !flow.supplementaryMessage || !flow.supplementaryMessage.trim()) return
+            polkitWindow.authError = flow.supplementaryMessage
+            if (flow.supplementaryIsError) polkitWindow.triggerShake()
+        }
+        flow.supplementaryMessageChanged.connect(supplementaryMessageHandler)
+
+        failedHandler = function() {
+            if (polkitWindow.currentFlow !== flow || !flow.failed) return
+            polkitWindow.isSubmitting = false
+            polkitWindow.triggerShake()
+            if (!polkitWindow.authError)
+                polkitWindow.authError = "Authentication failed. Please check your password."
+            passwordInput.selectAll()
+            passwordInput.forceActiveFocus()
+        }
+        flow.failedChanged.connect(failedHandler)
+
+        responseRequiredHandler = function() {
+            if (polkitWindow.currentFlow !== flow || !flow.isResponseRequired) return
+            polkitWindow.isSubmitting = false
+            passwordInput.forceActiveFocus()
+        }
+        flow.isResponseRequiredChanged.connect(responseRequiredHandler)
+    }
+
+    function disconnectCurrentFlow() {
+        if (connectedFlow) {
+            if (supplementaryMessageHandler)
+                connectedFlow.supplementaryMessageChanged.disconnect(supplementaryMessageHandler)
+            if (failedHandler)
+                connectedFlow.failedChanged.disconnect(failedHandler)
+            if (responseRequiredHandler)
+                connectedFlow.isResponseRequiredChanged.disconnect(responseRequiredHandler)
+        }
+        connectedFlow = null
+        supplementaryMessageHandler = null
+        failedHandler = null
+        responseRequiredHandler = null
+    }
+
+    Component.onCompleted: connectCurrentFlow()
+    Component.onDestruction: disconnectCurrentFlow()
 
     function cancel() {
         if (currentFlow) {

@@ -205,7 +205,13 @@ PanelWindow {
                                 z: -1
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: root.service.activate(modelData)
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: function(mouse) {
+                                    if (mouse.button === Qt.LeftButton)
+                                        root.service.activate(modelData)
+                                    else
+                                        root.service.dismiss(modelData)
+                                }
                             }
                         }
                     }

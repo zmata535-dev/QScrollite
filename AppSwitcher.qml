@@ -23,9 +23,8 @@ PanelWindow {
     // Keep hot-corner surfaces (Overlay layer) interactive above the panel.
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-app-switcher"
-    // Keep Escape handling while the pointer is on the switcher. Outside the
-    // bar, release keyboard focus so click-through text fields can receive keys.
-    WlrLayershell.keyboardFocus: switcherWindow.service.appSwitcherHovered
+    // Keep keyboard focus for Escape handling for as long as the switcher is open.
+    WlrLayershell.keyboardFocus: switcherWindow.service.open
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
         item: outsideClickArea
@@ -249,14 +248,15 @@ PanelWindow {
             if (event.key === Qt.Key_Escape) {
                 switcherWindow.service.closeSwitcher(true)
                 event.accepted = true
-                return
+            } else if (event.key === Qt.Key_G && (event.modifiers & Qt.ControlModifier)) {
+                switcherWindow.service.openGDictCalc("")
+                event.accepted = true
+            } else {
+                if (switcherWindow.contextMenuWindow !== null || !event.text || !event.text.trim()) return
+                if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+                switcherWindow.service.openAppMenu(event.text)
+                event.accepted = true
             }
-
-            if (switcherWindow.contextMenuWindow !== null || !event.text || !event.text.trim()) return
-            if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
-
-            switcherWindow.service.openAppMenu(event.text)
-            event.accepted = true
         }
     }
 
@@ -466,7 +466,7 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function(mouse) {
-                            if (mouse.button === Qt.RightButton)
+                            if (mouse.button === Qt.LeftButton)
                                 switcherWindow.service.notificationService.openCenter()
                             else
                                 switcherWindow.service.notificationService.toggleDnd()
@@ -476,43 +476,50 @@ PanelWindow {
                     ShellToolTip {
                         parent: dndMouse
                         visible: dndMouse.containsMouse
-                        text: (switcherWindow.service.doNotDisturb ? "Do Not Disturb: on (left-click to disable)" : "Do Not Disturb: off (left-click to enable)")
-                            + " · right-click for notifications"
+                        text: "Left-click for notifications · "
+                            + (switcherWindow.service.doNotDisturb ? "Do Not Disturb: on (right-click to disable)" : "Do Not Disturb: off (right-click to enable)")
                             + " · " + switcherWindow.service.unreadNotificationCount + " unread"
                     }
-                }
 
-                Rectangle {
-                    visible: switcherWindow.service.unreadNotificationCount > 0
-                    implicitWidth: unreadCountText.implicitWidth + 8
-                    implicitHeight: 16
-                    radius: 6
-                    color: "#202a3a"
-                    border.color: "#526584"
-                    border.width: 1
+                    Rectangle {
+                        id: unreadBadge
+                        visible: switcherWindow.service.unreadNotificationCount > 0
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -5
+                        anchors.rightMargin: -5
+                        z: 2
+                        implicitWidth: unreadCountText.implicitWidth + 8
+                        implicitHeight: 14
+                        radius: 7
+                        color: "#e34f68"
+                        border.color: "#111722"
+                        border.width: 1
 
-                    Text {
-                        id: unreadCountText
-                        anchors.centerIn: parent
-                        text: switcherWindow.service.unreadNotificationCount > 99
-                            ? "99+" : String(switcherWindow.service.unreadNotificationCount)
-                        color: "#c0c0d8"
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 9
-                    }
+                        Text {
+                            id: unreadCountText
+                            anchors.centerIn: parent
+                            text: switcherWindow.service.unreadNotificationCount > 99
+                                ? "99+" : String(switcherWindow.service.unreadNotificationCount)
+                            color: "#ffffff"
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.pixelSize: 8
+                            font.bold: true
+                        }
 
-                    MouseArea {
-                        id: unreadCountMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.notificationService.openCenter()
-                    }
+                        MouseArea {
+                            id: unreadCountMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: switcherWindow.service.notificationService.openCenter()
+                        }
 
-                    ShellToolTip {
-                        parent: unreadCountMouse
-                        visible: unreadCountMouse.containsMouse
-                        text: "Open notification center"
+                        ShellToolTip {
+                            parent: unreadCountMouse
+                            visible: unreadCountMouse.containsMouse
+                            text: "Open notification center"
+                        }
                     }
                 }
 

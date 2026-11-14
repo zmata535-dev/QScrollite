@@ -115,11 +115,17 @@ PanelWindow {
                     z: -1
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.service.activate(modelData)
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: function(mouse) {
+                        if (mouse.button === Qt.LeftButton)
+                            root.service.activate(modelData)
+                        else
+                            root.service.dismiss(modelData)
+                    }
                     ShellToolTip {
                         parent: cardMouse
                         visible: cardMouse.containsMouse
-                        text: "Click to focus " + modelData.appName
+                        text: "Left-click to focus " + modelData.appName + " · right-click to dismiss"
                     }
                 }
             }

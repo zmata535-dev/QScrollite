@@ -236,6 +236,10 @@ PanelWindow {
                             if (root.filterText.length) root.filterText = ""
                             else root.closeMenu()
                             event.accepted = true
+                        } else if (event.key === Qt.Key_G && (event.modifiers & Qt.ControlModifier)) {
+                            service.openGDictCalc(root.filterText)
+                            root.closeMenu()
+                            event.accepted = true
                         } else if (event.key === Qt.Key_Down) {
                             root.moveSelection(1)
                             event.accepted = true
@@ -271,6 +275,14 @@ PanelWindow {
                         Layout.fillWidth: true
                         text: root.showAllApps ? "Show pinned/recent" : "Show all"
                         onClicked: root.showAllApps = !root.showAllApps
+                    }
+
+                    ShellButton {
+                        text: "Google"
+                        onClicked: {
+                            service.openGDictCalc(root.filterText)
+                            root.closeMenu()
+                        }
                     }
 
                     ShellButton {

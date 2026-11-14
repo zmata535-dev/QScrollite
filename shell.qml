@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Polkit
 
 ShellRoot {
     id: root
@@ -35,8 +36,18 @@ ShellRoot {
         }
     }
 
-    PolkitDialog {
-        id: polkitDialog
+    PolkitAgent {
+        id: polkitAgent
+        onIsRegisteredChanged: console.log("[PolkitAgent] Registered:", isRegistered)
+        onAuthenticationRequestStarted: console.log("[PolkitAgent] Request started. Action:", flow ? flow.actionId : "")
+    }
+
+    LazyLoader {
+        active: polkitAgent.isActive && polkitAgent.flow !== null
+
+        PolkitDialog {
+            agent: polkitAgent
+        }
     }
 
     WindowSwitcherService {
@@ -98,8 +109,20 @@ ShellRoot {
         }
     }
 
-    AppMenu {
-        service: switcherService
+    LazyLoader {
+        active: switcherService.appMenuOpen
+
+        AppMenu {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: switcherService.gDictCalcOpen
+
+        GDictCalc {
+            service: switcherService
+        }
     }
 
     LazyLoader {
