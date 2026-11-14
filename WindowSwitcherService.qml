@@ -30,6 +30,7 @@ QtObject {
     property string bluetoothCommandOutput: ""
     property bool appMenuOpen: false
     property bool appMenuPending: false
+    property string appMenuInitialText: ""
     property bool calendarOpen: false
     property bool calendarPending: false
     property bool clockOpen: false
@@ -474,7 +475,7 @@ QtObject {
         if (emptyWorkspaceAction === "clock")
             openClock();
         else if (emptyWorkspaceAction === "switcher")
-            openSwitcher();
+            openSwitcher("bottom-center");
     }
 
     // Keep the app list fresh while open, but poll less often while closed so
@@ -1331,11 +1332,18 @@ QtObject {
         }
     }
 
-    function openAppMenu() {
+    function openAppMenu(initialText) {
+        appMenuInitialText = String(initialText || "")
         cancelCompactClockForAppPanels();
-        closeSwitcher();
-        appMenuPending = true;
-        appMenuTimer.restart();
+        closeSwitcher(true);
+        if (appMenuInitialText.length > 0) {
+            appMenuTimer.stop();
+            appMenuPending = false;
+            appMenuOpen = true;
+        } else {
+            appMenuPending = true;
+            appMenuTimer.restart();
+        }
     }
 
     function toggleAppMenu() {

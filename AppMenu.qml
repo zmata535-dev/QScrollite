@@ -103,6 +103,9 @@ PanelWindow {
 
     onVisibleChanged: {
         if (visible) {
+            filterText = service.appMenuInitialText
+            service.appMenuInitialText = ""
+            selectedIndex = 0
             entranceAnimation.restart()
             Qt.callLater(function() {
                 if (root.visible) searchField.forceActiveFocus()
@@ -224,7 +227,7 @@ PanelWindow {
                 ShellTextField {
                     id: searchField
                     Layout.fillWidth: true
-                    placeholderText: "Search, calculate (2 + 2), or convert (10 km to mi)…"
+                    placeholderText: "Search, calculate (6 + 9), or convert (10 km to mi)…"
                     text: root.filterText
                     selectByMouse: true
                     onTextEdited: root.filterText = text

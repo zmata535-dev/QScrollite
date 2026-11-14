@@ -245,8 +245,18 @@ PanelWindow {
         anchors.fill: parent
         focus: true
 
-        Keys.onEscapePressed: {
-            switcherWindow.service.closeSwitcher(true);
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Escape) {
+                switcherWindow.service.closeSwitcher(true)
+                event.accepted = true
+                return
+            }
+
+            if (switcherWindow.contextMenuWindow !== null || !event.text || !event.text.trim()) return
+            if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return
+
+            switcherWindow.service.openAppMenu(event.text)
+            event.accepted = true
         }
     }
 
@@ -260,7 +270,7 @@ PanelWindow {
         y: switcherWindow.service.switcherPlacement === "bottom-center"
             ? Math.max(16, switcherWindow.height - height - 28) : 16
 
-        width: Math.min(switcherWindow.width - 32, Math.max(500, mainCol.implicitWidth + 16)) * 0.9
+        width: Math.min(switcherWindow.width - 32, Math.max(500, mainCol.implicitWidth + 16)) * 0.9 + 17
         height: mainCol.implicitHeight + 14
 
         color: "#111722"
