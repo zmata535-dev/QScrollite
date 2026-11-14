@@ -223,7 +223,7 @@ font.pixelSize: 17
                     Layout.fillWidth: true
 
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
-                        text: "Idle timer settings"
+                        text: "Settings"
                         color: "#e2e8f0"
                         font.pixelSize: 14}
 
@@ -280,6 +280,16 @@ font.pixelSize: 17
                         from: 1; to: 3600; editable: true
                         value: root.service.compactClockTimeout
                         onValueModified: root.service.compactClockTimeout = value
+                    }
+
+                    ShellCheckBox {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Compact clock during media playback"
+                        enabled: root.service.compactClockEnabled
+                        checked: root.service.compactClockOnMediaPlaying
+                        onToggled: root.service.compactClockOnMediaPlaying = checked
                     }
 
                     ShellCheckBox {
@@ -388,11 +398,40 @@ font.pixelSize: 17
                     }
                 }
 
-                ShellCheckBox {
-                    font.pixelSize: 10
-                    text: "Show Quickshell RSS in AppSwitcher"
-                    checked: root.service.showRssUsage
-                    onToggled: root.service.showRssUsage = checked
+                RowLayout {
+                    Layout.fillWidth: true
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Show RSS"
+                        checked: root.service.showRssUsage
+                        onToggled: root.service.showRssUsage = checked
+                    }
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Auto-hide"
+                        checked: root.service.autoHideAppSwitcherOnPointerLeave
+                        onToggled: root.service.autoHideAppSwitcherOnPointerLeave = checked
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Top AppSwitcher"
+                        checked: root.service.topAppSwitcherEnabled
+                        onToggled: root.service.topAppSwitcherEnabled = checked
+                    }
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Bottom AppSwitcher"
+                        checked: root.service.bottomAppSwitcherEnabled
+                        onToggled: root.service.bottomAppSwitcherEnabled = checked
+                    }
                 }
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: "#283448" }
@@ -401,40 +440,50 @@ font.pixelSize: 17
                     color: "#abc7ff"
                     font.pixelSize: 11}
 
-                GridLayout {
+                RowLayout {
                     Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: 8
-                    rowSpacing: 4
+                    spacing: 6
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Narrow (%)"; color: "#dce5f2"; font.pixelSize: 10 }
-                    ShellSpinBox {
-                        implicitHeight: 20
-                        font.pixelSize: 9
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        from: 10; to: 100; editable: true
-                        value: root.service.columnWidthSmall
-                        onValueModified: root.service.columnWidthSmall = value
+                        spacing: 3
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Narrow (%)"; color: "#dce5f2"; font.pixelSize: 10 }
+                        ShellSpinBox {
+                            implicitHeight: 20
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                            from: 10; to: 100; editable: true
+                            value: root.service.columnWidthSmall
+                            onValueModified: root.service.columnWidthSmall = value
+                        }
                     }
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Normal (%)"; color: "#dce5f2"; font.pixelSize: 10 }
-                    ShellSpinBox {
-                        implicitHeight: 20
-                        font.pixelSize: 9
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        from: 10; to: 100; editable: true
-                        value: root.service.columnWidthMedium
-                        onValueModified: root.service.columnWidthMedium = value
+                        spacing: 3
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Normal (%)"; color: "#dce5f2"; font.pixelSize: 10 }
+                        ShellSpinBox {
+                            implicitHeight: 20
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                            from: 10; to: 100; editable: true
+                            value: root.service.columnWidthMedium
+                            onValueModified: root.service.columnWidthMedium = value
+                        }
                     }
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Wide (%)"; color: "#dce5f2"; font.pixelSize: 10 }
-                    ShellSpinBox {
-                        implicitHeight: 20
-                        font.pixelSize: 9
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        from: 10; to: 100; editable: true
-                        value: root.service.columnWidthLarge
-                        onValueModified: root.service.columnWidthLarge = value
+                        spacing: 3
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Wide (%)"; color: "#dce5f2"; font.pixelSize: 10 }
+                        ShellSpinBox {
+                            implicitHeight: 20
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                            from: 10; to: 100; editable: true
+                            value: root.service.columnWidthLarge
+                            onValueModified: root.service.columnWidthLarge = value
+                        }
                     }
                 }
 
@@ -457,24 +506,27 @@ font.pixelSize: 17
                     }
                 }
 
-                ShellCheckBox {
-
-                    font.pixelSize: 10
-                    text: "Shatter glass when hiding the clock card"
-                    checked: root.service.clockShatterAnimationEnabled
-                    onToggled: {
-                        root.service.clockShatterAnimationEnabled = checked
-                        if (checked) root.service.clockSlideAnimationEnabled = false
+                RowLayout {
+                    Layout.fillWidth: true
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Shattered Glass"
+                        checked: root.service.clockShatterAnimationEnabled
+                        onToggled: {
+                            root.service.clockShatterAnimationEnabled = checked
+                            if (checked) root.service.clockSlideAnimationEnabled = false
+                        }
                     }
-                }
-
-                ShellCheckBox {
-                    font.pixelSize: 10
-                    text: "Slide to the top and shrink when hiding the clock card"
-                    checked: root.service.clockSlideAnimationEnabled
-                    onToggled: {
-                        root.service.clockSlideAnimationEnabled = checked
-                        if (checked) root.service.clockShatterAnimationEnabled = false
+                    ShellCheckBox {
+                        Layout.fillWidth: true
+                        font.pixelSize: 10
+                        text: "Slide"
+                        checked: root.service.clockSlideAnimationEnabled
+                        onToggled: {
+                            root.service.clockSlideAnimationEnabled = checked
+                            if (checked) root.service.clockShatterAnimationEnabled = false
+                        }
                     }
                 }
 
@@ -482,7 +534,7 @@ font.pixelSize: 17
                     Layout.fillWidth: true
                     spacing: 6
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light
                         text: "Clock text color"
                         color: "#dce5f2"
                         font.pixelSize: 10
@@ -514,18 +566,15 @@ font.pixelSize: 17
                             }
                         }
                     }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
-                        text: "Clock font size"
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light
+                        text: "Size"
                         color: "#dce5f2"
                         font.pixelSize: 10
                     }
                     ShellSpinBox {
                         implicitHeight: 20
                         font.pixelSize: 9
+                        Layout.preferredWidth: 70
                         from: 32; to: 160; editable: true
                         value: root.service.idleClockTextSize
                         onValueModified: root.service.idleClockTextSize = value

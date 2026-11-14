@@ -11,7 +11,7 @@ PanelWindow {
     required property var service
 
     screen: Quickshell.screens[0]
-    visible: true
+    visible: service.selectorOpen
 
     anchors {
         top: true

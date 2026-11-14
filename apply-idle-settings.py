@@ -16,6 +16,7 @@ config_path = home / ".config/hypr/hypridle.conf"
 defaults = {
     "compactClockTimeout": 3,
     "compactClockEnabled": True,
+    "compactClockOnMediaPlaying": False,
     "clockCardEnabled": True,
     "dimDisplayEnabled": True,
     "clockTimeout": 9,
@@ -131,6 +132,7 @@ clock_color = str(settings.get("clockTextColor", defaults["clockTextColor"]))
 if not re.fullmatch(r"#[0-9a-fA-F]{6}", clock_color):
     clock_color = defaults["clockTextColor"]
 compact_clock_enabled = boolean_setting("compactClockEnabled")
+compact_clock_on_media_playing = boolean_setting("compactClockOnMediaPlaying")
 clock_card_enabled = boolean_setting("clockCardEnabled")
 dim_display_enabled = boolean_setting("dimDisplayEnabled")
 icon_theme = str(settings.get("iconTheme", defaults["iconTheme"])).strip()
@@ -145,6 +147,7 @@ settings.update(
     displayOffTimeout=display_off,
     lockTimeout=lock,
     compactClockEnabled=compact_clock_enabled,
+    compactClockOnMediaPlaying=compact_clock_on_media_playing,
     clockCardEnabled=clock_card_enabled,
     dimDisplayEnabled=dim_display_enabled,
     clockTextColor=clock_color,
@@ -196,6 +199,7 @@ set_ini_value(home / ".config/gtk-4.0/settings.ini", "Settings", "gtk-icon-theme
 set_ini_value(home / ".config/qt6ct/qt6ct.conf", "Appearance", "icon_theme", icon_theme)
 
 idle_listeners = []
+media_playback_condition = " && qs ipc call clock mediaPlaying | grep -qx false" if compact_clock_on_media_playing else ""
 if compact_clock_enabled:
     idle_listeners.append(f'''listener {{
     timeout = {compact_clock}
@@ -207,7 +211,7 @@ if compact_clock_enabled:
 if clock_card_enabled:
     idle_listeners.append(f'''listener {{
     timeout = {clock}
-    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false
+    condition_cmd = qs ipc call idle-settings isOpen | grep -qx false && qs ipc call clock isOpen | grep -qx false{media_playback_condition}
     on-timeout = qs ipc call clock open
     on-resume = qs ipc call clock activity
 }}
@@ -215,6 +219,7 @@ if clock_card_enabled:
 if dim_display_enabled:
     idle_listeners.append(f'''listener {{
     timeout = {dim}
+    condition_cmd = qs ipc call clock mediaPlaying | grep -qx false
     on-timeout = brightnessctl -s set 10%
     on-resume = brightnessctl -r
 }}
@@ -229,12 +234,14 @@ config = f'''general {{
 {''.join(idle_listeners)}
 listener {{
     timeout = {display_off}
+    condition_cmd = qs ipc call clock mediaPlaying | grep -qx false
     on-timeout = hyprctl dispatch 'hl.dsp.dpms({{ action = "disable" }})'
     on-resume = hyprctl dispatch 'hl.dsp.dpms({{ action = "enable" }})'
 }}
 
 listener {{
     timeout = {lock}
+    condition_cmd = qs ipc call clock mediaPlaying | grep -qx false
     on-timeout = hyprlock
 }}
 '''

@@ -74,6 +74,30 @@ ShellRoot {
         }
     }
 
+    LazyLoader {
+        active: switcherService.volumeOsdVisible
+
+        VolumeOSD {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: switcherService.brightnessOsdVisible
+
+        BrightnessOSD {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: switcherService.bluetoothOpen
+
+        BluetoothManager {
+            service: switcherService
+        }
+    }
+
     AppMenu {
         service: switcherService
     }
@@ -336,6 +360,10 @@ ShellRoot {
 
         function compactIsOpen(): bool {
             return switcherService.compactClockOpen;
+        }
+
+        function mediaPlaying(): bool {
+            return switcherService.compactClockOnMediaPlaying && switcherService.hasPlayingMedia();
         }
 
         function activity(): string {

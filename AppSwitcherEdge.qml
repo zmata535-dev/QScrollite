@@ -9,7 +9,7 @@ PanelWindow {
     required property var service
 
     screen: modelData
-    visible: true
+    visible: service.bottomAppSwitcherEnabled
     color: "transparent"
     implicitWidth: screen.width
     implicitHeight: 12
@@ -28,17 +28,12 @@ PanelWindow {
 
     MouseArea {
         id: triggerArea
-        width: parent.width * 0.10
+        width: parent.width * 0.20
         height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         hoverEnabled: true
         acceptedButtons: Qt.NoButton
-        onEntered: {
-            if (edge.service.open)
-                edge.service.closeSwitcher(true)
-            else
-                edge.service.openSwitcher("bottom-center")
-        }
+        onEntered: edge.service.openSwitcher("bottom-center")
     }
 }

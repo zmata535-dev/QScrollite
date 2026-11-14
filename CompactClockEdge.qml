@@ -21,20 +21,33 @@ PanelWindow {
 
     implicitHeight: 12
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-compact-clock-hotcorner"
     exclusionMode: ExclusionMode.Ignore
 
+    Timer {
+        id: closeOnExitTimer
+        interval: 300
+        repeat: false
+        onTriggered: {
+            if (!edge.service.compactClockCardHovered)
+                edge.service.closeCompactClock()
+        }
+    }
+
     MouseArea {
-        width: parent.width * 0.10
+        width: parent.width * 0.20
         height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         acceptedButtons: edge.service.compactClockOpen
             ? Qt.LeftButton | Qt.RightButton
             : Qt.NoButton
         hoverEnabled: true
-        onEntered: edge.service.showCompactClockFromEdge()
-        onExited: edge.service.closeCompactClock()
+        onEntered: {
+            closeOnExitTimer.stop()
+            edge.service.showCompactClockFromEdge()
+        }
+        onExited: closeOnExitTimer.restart()
         onPressed: function(mouse) {
             if (!edge.service.compactClockOpen) return
             if (mouse.button === Qt.LeftButton) {

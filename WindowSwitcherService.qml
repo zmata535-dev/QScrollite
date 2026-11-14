@@ -1,6 +1,8 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.Mpris
+import Quickshell.Wayland
 
 QtObject {
     id: service
@@ -12,15 +14,36 @@ QtObject {
     property string switcherPlacement: "top-left"
     property bool appSwitcherHovered: false
     property bool appSwitcherClosePending: false
+    property int volumePercent: 0
+    property bool volumeMuted: false
+    property bool volumeOsdVisible: false
+    property int brightnessPercent: 0
+    property bool brightnessOsdVisible: false
+    property bool bluetoothOpen: false
+    property bool bluetoothScanning: false
+    property bool bluetoothPowered: false
+    property bool bluetoothDaemonReady: false
+    property bool bluetoothScanOnOpen: false
+    property bool bluetoothPowerAfterServiceStart: false
+    property var bluetoothDevices: []
+    property string bluetoothMessage: ""
+    property string bluetoothCommandOutput: ""
     property bool appMenuOpen: false
     property bool appMenuPending: false
     property bool calendarOpen: false
     property bool calendarPending: false
     property bool clockOpen: false
     property bool compactClockOpen: false
+    property var clockNow: new Date()
+    property bool clockColonVisible: true
+    property int clockTickCount: 0
     property bool compactClockPending: false
     property bool compactClockClosing: false
     property bool compactClockCloseToCenter: false
+    property bool compactClockClockHovered: false
+    property bool compactClockControlsHovered: false
+    readonly property bool compactClockCardHovered:
+        compactClockClockHovered || compactClockControlsHovered
     property bool clockCloseRequested: false
     property bool clockSlideCloseRequested: false
     property bool idleConfigOpen: false
@@ -28,6 +51,7 @@ QtObject {
     property alias idleClockTimeout: idleSettings.clockTimeout
     property alias compactClockTimeout: idleSettings.compactClockTimeout
     property alias compactClockEnabled: idleSettings.compactClockEnabled
+    property alias compactClockOnMediaPlaying: idleSettings.compactClockOnMediaPlaying
     property alias clockCardEnabled: idleSettings.clockCardEnabled
     property alias dimDisplayEnabled: idleSettings.dimDisplayEnabled
     onCompactClockEnabledChanged: {
@@ -54,7 +78,10 @@ QtObject {
     property alias clockShatterAnimationEnabled: idleSettings.clockShatterAnimationEnabled
     property alias clockSlideAnimationEnabled: idleSettings.clockSlideAnimationEnabled
     property alias showRssUsage: idleSettings.showRssUsage
+    property alias topAppSwitcherEnabled: idleSettings.topAppSwitcherEnabled
+    property alias bottomAppSwitcherEnabled: idleSettings.bottomAppSwitcherEnabled
     property alias emptyWorkspaceAction: idleSettings.emptyWorkspaceAction
+    property alias autoHideAppSwitcherOnPointerLeave: idleSettings.autoHideAppSwitcherOnPointerLeave
     onEmptyWorkspaceActionChanged: lastEmptyWorkspaceKey = ""
     property alias pinnedApps: pinnedAppsStore.pinnedApps
     property alias columnWidthSmall: idleSettings.columnWidthSmall
@@ -71,6 +98,21 @@ QtObject {
 
     readonly property int unreadNotificationCount: notificationService ? notificationService.unread.length : 0
     readonly property bool doNotDisturb: notificationService ? notificationService.doNotDisturb : false
+
+    property var mediaPlaybackIdleMonitor: IdleMonitor {
+        id: mediaPlaybackIdleMonitor
+        enabled: service.compactClockEnabled && service.compactClockOnMediaPlaying && service.hasPlayingMedia()
+        timeout: service.compactClockTimeout
+        respectInhibitors: false
+        onIsIdleChanged: {
+            if (!service.compactClockEnabled || !service.compactClockOnMediaPlaying || !service.hasPlayingMedia())
+                return
+            if (isIdle)
+                service.requestCompactClock()
+            else if (service.compactClockOpen || service.compactClockPending)
+                service.closeCompactClock()
+        }
+    }
 
     property var idleSettingsFile: FileView {
         id: idleSettingsFile
@@ -89,6 +131,7 @@ QtObject {
             property int clockTimeout: 9
             property int compactClockTimeout: 3
             property bool compactClockEnabled: true
+            property bool compactClockOnMediaPlaying: false
             property bool clockCardEnabled: true
             property bool dimDisplayEnabled: true
             property int dimTimeout: 15
@@ -102,7 +145,10 @@ QtObject {
             property bool clockShatterAnimationEnabled: true
             property bool clockSlideAnimationEnabled: false
             property bool showRssUsage: false
+            property bool topAppSwitcherEnabled: true
+            property bool bottomAppSwitcherEnabled: true
             property string emptyWorkspaceAction: "none"
+            property bool autoHideAppSwitcherOnPointerLeave: false
             property int columnWidthSmall: 50
             property int columnWidthMedium: 69
             property int columnWidthLarge: 92
@@ -431,21 +477,211 @@ QtObject {
             openSwitcher();
     }
 
-    // Auto-refresh timer while switcher is open
-    property var liveTimer: Timer {
-        interval: 500
+    // Keep the app list fresh while open, but poll less often while closed so
+    // empty-workspace actions still notice workspace changes without constant
+    // compositor polling.
+    property var refreshTimer: Timer {
+        interval: service.open ? 500 : 5000
         repeat: true
-        running: service.open
+        running: true
         onTriggered: {
             service.refresh();
         }
     }
 
-    property var workspaceMonitorTimer: Timer {
+    // All visible clock surfaces share one time update and two-second blink.
+    property var clockTimer: Timer {
         interval: 1000
         repeat: true
-        running: true
-        onTriggered: service.refresh()
+        running: service.open || service.clockOpen || service.compactClockOpen
+        onTriggered: {
+            service.clockNow = new Date()
+            service.clockTickCount++
+            if (service.clockTickCount % 2 === 0)
+                service.clockColonVisible = !service.clockColonVisible
+        }
+    }
+
+    property var volumeOsdTimer: Timer {
+        interval: 1400
+        repeat: false
+        onTriggered: service.volumeOsdVisible = false
+    }
+
+    property var volumeReadTimer: Timer {
+        interval: 120
+        repeat: false
+        onTriggered: if (!volumeReadProcess.running) volumeReadProcess.running = true
+    }
+
+    property var volumeReadProcess: Process {
+        id: volumeReadProcess
+        command: ["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"]
+        running: false
+        stdout: StdioCollector {
+            onTextChanged: {
+                var output = String(text || "")
+                var match = output.match(/Volume:\s*([0-9.]+)/)
+                if (match) service.volumePercent = Math.max(0, Math.min(100, Math.round(Number(match[1]) * 100)))
+                service.volumeMuted = output.indexOf("[MUTED]") !== -1
+            }
+        }
+    }
+
+    property var brightnessOsdTimer: Timer {
+        interval: 2400
+        repeat: false
+        onTriggered: service.brightnessOsdVisible = false
+    }
+
+    property var brightnessReadTimer: Timer {
+        interval: 120
+        repeat: false
+        onTriggered: if (!brightnessReadProcess.running) brightnessReadProcess.running = true
+    }
+
+    property var brightnessReadProcess: Process {
+        id: brightnessReadProcess
+        command: ["brightnessctl", "-m"]
+        running: false
+        stdout: StdioCollector {
+            onTextChanged: {
+                var lines = String(text || "").trim().split("\n")
+                for (var i = 0; i < lines.length; i++) {
+                    var fields = lines[i].split(",")
+                    if (fields.length < 4) continue
+                    var value = parseInt(String(fields[3]).replace("%", ""))
+                    if (!isNaN(value)) service.brightnessPercent = Math.max(0, Math.min(100, value))
+                }
+            }
+        }
+    }
+
+    property var bluetoothRefreshProcess: Process {
+        id: bluetoothRefreshProcess
+        command: ["bash", "-c", "printf 'show\\ndevices\\nquit\\n' | timeout 2s bluetoothctl 2>&1"]
+        running: false
+        stdout: StdioCollector {
+            onTextChanged: {
+                var output = String(text || "")
+                service.bluetoothDaemonReady = /Powered:/i.test(output)
+                service.bluetoothPowered = /Powered:\s*yes/i.test(output)
+                var lines = output.split("\n")
+                var devices = []
+                var seen = {}
+                for (var i = 0; i < lines.length; i++) {
+                    var deviceOffset = lines[i].indexOf("Device ")
+                    if (deviceOffset < 0) continue
+                    var fields = lines[i].substring(deviceOffset + 7).trim()
+                    var address = fields.substring(0, 17).toUpperCase()
+                    var name = fields.substring(17).trim()
+                    if (!/^[0-9A-F:]{17}$/i.test(address) || !name) continue
+                    if (seen[address]) continue
+                    seen[address] = true
+                    devices.push({ address: address, name: name })
+                }
+                service.bluetoothDevices = devices
+                if (output.indexOf("Waiting to connect to bluetoothd") !== -1)
+                    service.bluetoothMessage = "Bluetooth service is inactive"
+                else if (/No default controller/i.test(output))
+                    service.bluetoothMessage = "No Bluetooth adapter found"
+                else if (service.bluetoothDaemonReady)
+                    service.bluetoothMessage = ""
+            }
+        }
+        onExited: function(exitCode, exitStatus) {
+            if (!service.bluetoothDaemonReady && !service.bluetoothMessage)
+                service.bluetoothMessage = exitCode === 124 ? "Bluetooth service is not responding" : "Could not query Bluetooth adapter"
+            if (service.bluetoothDaemonReady && service.bluetoothPowerAfterServiceStart) {
+                service.bluetoothPowerAfterServiceStart = false
+                service.runBluetoothCommand(["power", "on"], "Turning Bluetooth on…")
+            }
+            if (service.bluetoothScanOnOpen && service.bluetoothDaemonReady) {
+                service.bluetoothScanOnOpen = false
+                service.scanBluetooth()
+            }
+        }
+    }
+
+    property var bluetoothScanProcess: Process {
+        id: bluetoothScanProcess
+        command: ["timeout", "10s", "bluetoothctl", "--timeout", "8", "scan", "on"]
+        running: false
+        onRunningChanged: service.bluetoothScanning = running
+        onExited: function(exitCode, exitStatus) {
+            service.bluetoothScanning = false
+            service.refreshBluetooth()
+            if (exitCode !== 0 && !service.bluetoothMessage)
+                service.bluetoothMessage = "Bluetooth scan failed"
+        }
+    }
+
+    property var bluetoothCommandProcess: Process {
+        id: bluetoothCommandProcess
+        command: []
+        running: false
+        stdout: StdioCollector {
+            onTextChanged: {
+                var output = String(text || "").trim()
+                if (output) {
+                    service.bluetoothCommandOutput = output
+                    service.bluetoothMessage = output.split("\n").slice(-2).join(" ")
+                }
+            }
+        }
+        stderr: StdioCollector {
+            onTextChanged: {
+                var output = String(text || "").trim()
+                if (output) {
+                    service.bluetoothCommandOutput = output
+                    service.bluetoothMessage = output.split("\n").slice(-2).join(" ")
+                }
+            }
+        }
+        onExited: function(exitCode, exitStatus) {
+            if (exitCode === 124)
+                service.bluetoothMessage = "Bluetooth command timed out"
+            else if (exitCode !== 0 && !service.bluetoothCommandOutput)
+                service.bluetoothMessage = "Bluetooth command failed (" + exitCode + ")"
+            else if (exitCode === 0 && !service.bluetoothCommandOutput)
+                service.bluetoothMessage = "Command completed"
+            service.refreshBluetoothTimer.restart()
+        }
+    }
+
+    property var bluetoothServiceRetryTimer: Timer {
+        interval: 1800
+        repeat: false
+        onTriggered: service.refreshBluetooth()
+    }
+
+    property var bluetoothServiceStartProcess: Process {
+        id: bluetoothServiceStartProcess
+        command: ["pkexec", "systemctl", "start", "bluetooth.service"]
+        running: false
+        stderr: StdioCollector {
+            onTextChanged: {
+                var output = String(text || "").trim()
+                if (output) service.bluetoothMessage = output
+            }
+        }
+        onExited: function(exitCode, exitStatus) {
+            if (exitCode !== 0) {
+                service.bluetoothPowerAfterServiceStart = false
+                if (!service.bluetoothMessage || service.bluetoothMessage.indexOf("Requesting Bluetooth service") === 0)
+                    service.bluetoothMessage = "Could not start Bluetooth service"
+            } else {
+                service.bluetoothMessage = "Bluetooth service started"
+            }
+            service.bluetoothServiceRetryTimer.restart()
+        }
+    }
+
+    property var bluetoothRefreshTimer: Timer {
+        interval: 3000
+        repeat: true
+        running: service.bluetoothOpen
+        onTriggered: service.refreshBluetooth()
     }
 
     function openSwitcher(placement) {
@@ -695,6 +931,134 @@ QtObject {
         Quickshell.execDetached(["bash", home + "/.config/quickshell/bin/qs-ctl", "restart"]);
     }
 
+    function openVolumeControl() {
+        Quickshell.execDetached(["pavucontrol"]);
+    }
+
+    function showVolumeOsd() {
+        volumeOsdVisible = true;
+        volumeOsdTimer.restart();
+        volumeReadTimer.restart();
+    }
+
+    function adjustVolume(direction) {
+        var change = direction > 0 ? "5%+" : "5%-";
+        Quickshell.execDetached(["wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", change]);
+        showVolumeOsd();
+    }
+
+    function toggleVolumeMute() {
+        Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"]);
+        volumeMuted = !volumeMuted;
+        showVolumeOsd();
+    }
+
+    function showBrightnessOsd() {
+        brightnessOsdVisible = true
+        brightnessOsdTimer.restart()
+        brightnessReadTimer.restart()
+    }
+
+    function adjustBrightness(direction) {
+        var change = direction > 0 ? "5%+" : "5%-"
+        Quickshell.execDetached(["brightnessctl", "-e4", "-n2", "set", change])
+        showBrightnessOsd()
+    }
+
+    function setBrightness(value) {
+        var percent = Math.max(1, Math.min(100, Math.round(value)))
+        Quickshell.execDetached(["brightnessctl", "-e4", "-n2", "set", percent + "%"])
+        brightnessPercent = percent
+        showBrightnessOsd()
+    }
+
+    function toggleBluetooth() {
+        setBluetoothPower(!bluetoothPowered);
+    }
+
+    function openBluetoothManager() {
+        bluetoothOpen = true;
+        bluetoothScanOnOpen = true;
+        bluetoothMessage = "Looking for nearby devices…";
+        refreshBluetooth();
+    }
+
+    function closeBluetoothManager() {
+        bluetoothOpen = false;
+        if (bluetoothScanProcess.running) {
+            bluetoothScanProcess.running = false;
+            Quickshell.execDetached(["bluetoothctl", "scan", "off"]);
+        }
+        bluetoothScanning = false;
+    }
+
+    function refreshBluetooth() {
+        if (!bluetoothRefreshProcess.running)
+            bluetoothRefreshProcess.running = true;
+    }
+
+    function scanBluetooth() {
+        if (!bluetoothDaemonReady) {
+            bluetoothMessage = "Start the Bluetooth service before scanning"
+            return
+        }
+        if (!bluetoothPowered) {
+            bluetoothMessage = "Turn Bluetooth on before scanning"
+            return
+        }
+        if (!bluetoothScanProcess.running) {
+            bluetoothMessage = "Scanning for nearby devices…";
+            bluetoothScanProcess.running = true;
+        }
+    }
+
+    function runBluetoothCommand(args, message) {
+        bluetoothMessage = message || ""
+        if (bluetoothCommandProcess.running) {
+            bluetoothMessage = "A Bluetooth command is already running"
+            return
+        }
+        bluetoothCommandOutput = ""
+        bluetoothCommandProcess.command = ["timeout", "12s", "bluetoothctl"].concat(args)
+        bluetoothCommandProcess.running = true
+    }
+
+    function setBluetoothPower(enabled) {
+        bluetoothPowered = enabled;
+        if (!bluetoothDaemonReady && enabled) {
+            startBluetoothService(true)
+            return
+        }
+        runBluetoothCommand(["power", enabled ? "on" : "off"], enabled ? "Turning Bluetooth on…" : "Turning Bluetooth off…");
+    }
+
+    function startBluetoothService(powerOnAfterStart) {
+        if (bluetoothServiceStartProcess.running) return
+        bluetoothPowerAfterServiceStart = powerOnAfterStart === true
+        bluetoothMessage = "Requesting Bluetooth service start…"
+        bluetoothServiceStartProcess.running = true
+    }
+
+    function pairBluetooth(address) {
+        runBluetoothCommand(["pair", address], "Pairing with " + address + "…");
+    }
+
+    function connectBluetooth(address) {
+        runBluetoothCommand(["connect", address], "Connecting to " + address + "…");
+    }
+
+    function disconnectBluetooth(address) {
+        runBluetoothCommand(["disconnect", address], "Disconnecting from " + address + "…");
+    }
+
+    function trustBluetooth(address) {
+        runBluetoothCommand(["trust", address], "Trusting " + address + "…");
+    }
+
+    function manageBluetooth() {
+        openBluetoothManager();
+    }
+
     function runSystemAction(action) {
         var command = [];
         if (action === "logout") {
@@ -725,10 +1089,21 @@ QtObject {
         }
     }
 
+    property var compactClockCalendarTimer: Timer {
+        interval: 280
+        repeat: false
+        onTriggered: {
+            service.calendarPending = false;
+            service.calendarOpen = true;
+        }
+    }
+
     property var clockOpenTimer: Timer {
         interval: 500
         repeat: false
         onTriggered: {
+            if (service.compactClockOnMediaPlaying && service.hasPlayingMedia())
+                return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
             if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending ||
                     service.calendarOpen || service.calendarPending || service.idleConfigOpen ||
@@ -769,16 +1144,27 @@ QtObject {
         calendarTimer.restart();
     }
 
+    function hasPlayingMedia() {
+        var players = Mpris.players.values || []
+        for (var i = 0; i < players.length; i++) {
+            if (players[i].isPlaying) return true
+        }
+        return false
+    }
+
     function openCalendarFromCompactClock() {
+        closeCompactClock();
         closeSwitcher();
         calendarPending = true;
         if (unreadNotificationCount > 0 && notificationService)
             notificationService.openCenter();
-        calendarTimer.restart();
+        calendarTimer.stop();
+        compactClockCalendarTimer.restart();
     }
 
     function openClock() {
         if (!clockCardEnabled) return;
+        if (compactClockOnMediaPlaying && hasPlayingMedia()) return;
         compactClockOpenTimer.stop();
         compactClockPending = false;
         closeCompactClock(true);
@@ -965,5 +1351,7 @@ QtObject {
     Component.onCompleted: {
         detectCompositor();
         refresh();
+        refreshBluetooth();
+        brightnessReadProcess.running = true;
     }
 }

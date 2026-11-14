@@ -20,7 +20,7 @@ PanelWindow {
         right: true
     }
 
-    // Keep hot-corner surfaces (Overlay layer) interactive above the full-screen panel.
+    // Keep hot-corner surfaces (Overlay layer) interactive above the panel.
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-app-switcher"
     // Keep Escape handling while the pointer is on the switcher. Outside the
@@ -28,19 +28,66 @@ PanelWindow {
     WlrLayershell.keyboardFocus: switcherWindow.service.appSwitcherHovered
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
-        item: container
+        item: outsideClickArea
+        Region { item: container }
         Region { item: appContextMenu }
     }
 
     color: "#35080c16"
 
-    property var now: new Date()
+    property var now: service.clockNow
     property int processRssKiB: 0
     property string focusAtOpen: ""
     property bool focusedIconScrollPending: true
     property var contextMenuWindow: null
     property real contextMenuX: 0
     property real contextMenuY: 0
+
+    Timer {
+        id: switcherLeaveTimer
+        interval: 1560
+        repeat: false
+        onTriggered: {
+            if (containerHoverHandler.hovered) {
+                switcherWindow.service.appSwitcherHovered = true
+                return
+            }
+
+            switcherWindow.service.appSwitcherHovered = false
+            if (!switcherWindow.visible || !switcherWindow.service.open) return
+            if (switcherWindow.service.appSwitcherClosePending ||
+                    (switcherWindow.service.autoHideAppSwitcherOnPointerLeave &&
+                     switcherWindow.contextMenuWindow === null))
+                switcherWindow.service.closeSwitcher(true)
+        }
+    }
+
+    Connections {
+        target: switcherWindow.service
+        function onOpenChanged() {
+            if (!switcherWindow.service.open) {
+                switcherLeaveTimer.stop()
+                return
+            }
+
+            switcherWindow.service.volumeReadTimer.restart()
+
+            // The switcher can open while the pointer is already outside its
+            // bar (for example from a hot edge). Start the same leave delay in
+            // that case; entering the bar stops it in HoverHandler below.
+            if (!containerHoverHandler.hovered)
+                switcherLeaveTimer.restart()
+        }
+    }
+
+    // A full-screen input target lets a click outside the bar dismiss it.
+    MouseArea {
+        id: outsideClickArea
+        anchors.fill: parent
+        z: -1
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onClicked: switcherWindow.service.closeSwitcher(true)
+    }
 
     property var inactivePinnedApps: {
         var result = []
@@ -123,16 +170,6 @@ PanelWindow {
         })
     }
 
-    Timer {
-        id: clockTimer
-        interval: 1000
-        repeat: true
-        running: switcherWindow.visible
-        onTriggered: {
-            switcherWindow.now = new Date();
-        }
-    }
-
     LazyLoader {
         active: switcherWindow.visible && switcherWindow.service.showRssUsage
 
@@ -198,7 +235,7 @@ PanelWindow {
             if (!switcherWindow.focusAtOpen) {
                 switcherWindow.focusAtOpen = activeId
             } else if (activeId !== switcherWindow.focusAtOpen) {
-                switcherWindow.service.closeSwitcher(true)
+                switcherWindow.service.closeSwitcher()
             }
         }
     }
@@ -234,15 +271,18 @@ PanelWindow {
         // Prevent background clicks through the panel
         MouseArea {
             anchors.fill: parent
-            hoverEnabled: true
             onClicked: {}
-            onEntered: switcherWindow.service.appSwitcherHovered = true
-            onExited: {
-                Qt.callLater(function() {
-                    switcherWindow.service.appSwitcherHovered = false
-                    if (switcherWindow.service.appSwitcherClosePending)
-                        switcherWindow.service.closeSwitcher(true)
-                })
+        }
+
+        HoverHandler {
+            id: containerHoverHandler
+            onHoveredChanged: {
+                if (hovered) {
+                    switcherLeaveTimer.stop()
+                    switcherWindow.service.appSwitcherHovered = true
+                } else {
+                    switcherLeaveTimer.restart()
+                }
             }
         }
 
@@ -307,51 +347,88 @@ PanelWindow {
                         font.pixelSize: 9}
                 }
 
-                // Configure the idle timers and clock card appearance
+                // Audio mixer
                 Rectangle {
                     implicitWidth: 22
                     implicitHeight: 22
                     radius: 6
-                    color: idleSettingsMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    color: volumeMouse.containsMouse ? "#273650"
+                        : (switcherWindow.service.volumeMuted ? "#32191f"
+                            : (switcherWindow.service.volumePercent >= 100 ? "#343124" : "#161d2a"))
+                    border.color: volumeMouse.containsMouse ? "#abc7ff"
+                        : (switcherWindow.service.volumeMuted ? "#8f3544"
+                            : (switcherWindow.service.volumePercent >= 100 ? "#d8c36f" : "#2b364a"))
                     border.width: 1
-
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
-                        text: "◷"
-                        color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 21
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.volumeMuted ? "󰝟" : "󰕾"
+                        color: volumeMouse.containsMouse ? "#abc7ff"
+                            : (switcherWindow.service.volumeMuted ? "#a94753"
+                                : (switcherWindow.service.volumePercent >= 100 ? "#f0dd89" : "#8092ab"))
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 18
                     }
-
                     MouseArea {
-                        id: idleSettingsMouse
+                        id: volumeMouse
                         anchors.fill: parent
                         hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.openIdleConfig()
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton)
+                                switcherWindow.service.toggleVolumeMute()
+                            else
+                                switcherWindow.service.openVolumeControl()
+                        }
+                        onWheel: function(event) {
+                            switcherWindow.service.adjustVolume(event.angleDelta.y > 0 ? 1 : -1)
+                            event.accepted = true
+                        }
+                        ShellToolTip {
+                            parent: volumeMouse
+                            visible: volumeMouse.containsMouse
+                            text: "Scroll: adjust volume · Left-click: mixer · Right-click: "
+                                + (switcherWindow.service.volumeMuted ? "unmute" : "mute")
+                        }
                     }
                 }
 
-                // Open the wallpaper picker
+                // Bluetooth power toggle
                 Rectangle {
                     implicitWidth: 22
                     implicitHeight: 22
                     radius: 6
-                    color: wallpaperMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: wallpaperMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    color: bluetoothMouse.containsMouse ? "#273650"
+                        : (switcherWindow.service.bluetoothPowered ? "#1b3034" : "#161d2a")
+                    border.color: bluetoothMouse.containsMouse ? "#abc7ff"
+                        : (switcherWindow.service.bluetoothPowered ? "#5b9b95" : "#2b364a")
                     border.width: 1
-
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
-                        text: "▧"
-                        color: wallpaperMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 16
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.bluetoothPowered ? "󰂯" : "󰂲"
+                        color: bluetoothMouse.containsMouse ? "#abc7ff"
+                            : (switcherWindow.service.bluetoothPowered ? "#8fd8cf" : "#8092ab")
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 12
                     }
-
                     MouseArea {
-                        id: wallpaperMouse
+                        id: bluetoothMouse
                         anchors.fill: parent
                         hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.toggleWallpaperSelector()
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton)
+                                switcherWindow.service.toggleBluetooth()
+                            else
+                                switcherWindow.service.manageBluetooth()
+                        }
+                        ShellToolTip {
+                            parent: bluetoothMouse
+                            visible: bluetoothMouse.containsMouse
+                            text: "Left-click: manage devices · Right-click: power "
+                                + (switcherWindow.service.bluetoothPowered ? "off" : "on")
+                        }
                     }
                 }
 
@@ -426,6 +503,39 @@ PanelWindow {
                         parent: unreadCountMouse
                         visible: unreadCountMouse.containsMouse
                         text: "Open notification center"
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: brightnessMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: brightnessMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰛨"
+                        color: brightnessMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+                    MouseArea {
+                        id: brightnessMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.showBrightnessOsd()
+                        onWheel: function(event) {
+                            switcherWindow.service.adjustBrightness(event.angleDelta.y > 0 ? 1 : -1)
+                            event.accepted = true
+                        }
+                        ShellToolTip {
+                            parent: brightnessMouse
+                            visible: brightnessMouse.containsMouse
+                            text: "Click: brightness slider · Scroll: adjust brightness"
+                        }
                     }
                 }
 
@@ -820,6 +930,7 @@ PanelWindow {
                                                 anchors.top: parent.top
                                                 anchors.right: parent.right
                                                 anchors.topMargin: -4
+                                                anchors.rightMargin: -5
                                                 radius: 5
                                                 visible: appMouse.containsMouse
                                                 color: appMouse.containsMouse ? "#a83245" : "#71303d"
@@ -945,6 +1056,63 @@ PanelWindow {
                     }
                 }
 
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: idleSettingsMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "◷"
+                        color: idleSettingsMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 17
+                    }
+                    MouseArea {
+                        id: idleSettingsMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.openIdleConfig()
+                        ShellToolTip {
+                            parent: idleSettingsMouse
+                            visible: idleSettingsMouse.containsMouse
+                            text: "Settings"
+                        }
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: wallpaperMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: wallpaperMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "▧"
+                        color: wallpaperMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 16
+                    }
+                    MouseArea {
+                        id: wallpaperMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.toggleWallpaperSelector()
+                        ShellToolTip {
+                            parent: wallpaperMouse
+                            visible: wallpaperMouse.containsMouse
+                            text: "Wallpaper"
+                        }
+                    }
+                }
+
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Session"
                     color: "#8092ab"
                     font.pixelSize: 10
@@ -976,7 +1144,12 @@ PanelWindow {
         z: 90
         visible: switcherWindow.contextMenuWindow !== null
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: switcherWindow.contextMenuWindow = null
+        onClicked: function(mouse) {
+            var point = container.mapFromItem(switcherWindow, mouse.x, mouse.y)
+            if (!container.contains(point))
+                switcherWindow.service.closeSwitcher(true)
+            switcherWindow.contextMenuWindow = null
+        }
     }
 
     GlowBorder {

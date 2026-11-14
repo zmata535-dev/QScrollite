@@ -78,6 +78,11 @@ QtObject {
         }
     }
 
+    function showAppSwitcher() {
+        if (!switcherService) return;
+        switcherService.openSwitcher();
+    }
+
     function triggerCorner(corner, screenName) {
         if (!enabled) return false;
 
@@ -103,9 +108,10 @@ QtObject {
             cornerTriggered("top-right", screenName || "");
             return true;
         } else if (corner === "top-left") {
+            if (switcherService && !switcherService.topAppSwitcherEnabled) return false;
             if (now - lastTriggerTL < cd) return false;
             lastTriggerTL = now;
-            toggleAppSwitcher();
+            showAppSwitcher();
             cornerTriggered("top-left", screenName || "");
             return true;
         }

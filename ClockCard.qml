@@ -24,8 +24,8 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-clock"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
 
-    property var now: new Date()
-    property bool colonVisible: true
+    property var now: service.clockNow
+    property bool colonVisible: service.clockColonVisible
     property real fractureProgress: 0
     property real slideCloseProgress: 0
     property int fractureSeed: 1
@@ -91,16 +91,6 @@ PanelWindow {
         duration: 480
         easing.type: Easing.InCubic
         onFinished: root.finishClockClose()
-    }
-
-    Timer {
-        interval: 2000
-        repeat: true
-        running: root.visible
-        onTriggered: {
-            root.now = new Date()
-            root.colonVisible = !root.colonVisible
-        }
     }
 
     Item {
