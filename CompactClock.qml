@@ -74,16 +74,6 @@ PanelWindow {
         root.service.compactClockControlsHovered = false
     }
 
-    Timer {
-        id: closeAfterPointerExit
-        interval: 240
-        repeat: false
-        onTriggered: {
-            if (!root.service.compactClockCardHovered)
-                root.service.closeCompactClock()
-        }
-    }
-
     function cycleMediaPlayer() {
         var players = availableMediaPlayers;
         if (players.length < 2) return;
@@ -219,14 +209,14 @@ PanelWindow {
 
     function updateClockHover(hovered) {
         root.service.compactClockClockHovered = hovered;
-        if (hovered) closeAfterPointerExit.stop();
-        else closeAfterPointerExit.restart();
+        if (hovered) root.service.cancelCompactClockPointerExit();
+        else root.service.scheduleCompactClockPointerExit(240);
     }
 
     function updateControlsHover(hovered) {
         root.service.compactClockControlsHovered = hovered;
-        if (hovered) closeAfterPointerExit.stop();
-        else closeAfterPointerExit.restart();
+        if (hovered) root.service.cancelCompactClockPointerExit();
+        else root.service.scheduleCompactClockPointerExit(240);
     }
 
     NumberAnimation {
@@ -345,18 +335,33 @@ PanelWindow {
             background: Item {}
             onHoveredChanged: root.updateClockHover(hovered)
             onClicked: root.service.openCalendarFromCompactClock()
-            contentItem: Text {
-                id: clockButtonText
-                height: implicitHeight
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: compactCard.y + compactCard.height / 2 - height / 2 - clockButton.y
-                text: clockButton.text
-                color: "#ffffff"
-                font.family: "JetBrainsMono Nerd Font Mono"
-                font.weight: Font.Light
-                font.pixelSize: root.service.compactClockTextSize
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+            contentItem: Row {
+                anchors.centerIn: parent
+                spacing: 0
+
+                Text {
+                    text: Qt.formatDateTime(root.now, "HH")
+                    color: "#ffffff"
+                    font.family: "JetBrainsMono Nerd Font Mono"
+                    font.weight: Font.Light
+                    font.pixelSize: root.service.compactClockTextSize
+                }
+
+                Text {
+                    text: ":"
+                    color: root.colonVisible ? "#ffffff" : "#414957"
+                    font.family: "JetBrainsMono Nerd Font Mono"
+                    font.weight: Font.Light
+                    font.pixelSize: root.service.compactClockTextSize
+                }
+
+                Text {
+                    text: Qt.formatDateTime(root.now, "mm")
+                    color: "#ffffff"
+                    font.family: "JetBrainsMono Nerd Font Mono"
+                    font.weight: Font.Light
+                    font.pixelSize: root.service.compactClockTextSize
+                }
             }
         }
 

@@ -278,7 +278,7 @@ PanelWindow {
                     }
 
                     ShellButton {
-                        text: "Google"
+                        text: "more ..."
                         onClicked: {
                             service.openGDictCalc(root.filterText)
                             root.closeMenu()

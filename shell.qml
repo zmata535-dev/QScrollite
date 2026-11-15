@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Polkit
+import "."
 
 ShellRoot {
     id: root
@@ -59,6 +60,14 @@ ShellRoot {
     NotificationService {
         id: notifications
         switcherService: switcherService
+    }
+
+    Connections {
+        target: Quickshell
+        Component.onCompleted: switcherService.rememberClipboardText(Quickshell.clipboardText)
+        function onClipboardTextChanged() {
+            switcherService.rememberClipboardText(Quickshell.clipboardText)
+        }
     }
 
     LazyLoader {
@@ -121,6 +130,22 @@ ShellRoot {
         active: switcherService.gDictCalcOpen
 
         GDictCalc {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: switcherService.qSysMonOpen
+
+        QSysMon {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: switcherService.clipboardOpen
+
+        ClipboardManager {
             service: switcherService
         }
     }
@@ -344,6 +369,42 @@ ShellRoot {
             switcherService.appMenuTimer.stop();
             switcherService.appMenuPending = false;
             switcherService.appMenuOpen = false;
+        }
+    }
+
+    IpcHandler {
+        target: "gdictcalc"
+
+        function open(): void {
+            switcherService.openGDictCalc("");
+        }
+
+        function close(): void {
+            switcherService.gDictCalcOpen = false;
+        }
+    }
+
+    IpcHandler {
+        target: "qsysmon"
+
+        function open(): void {
+            switcherService.openQSysMon();
+        }
+
+        function close(): void {
+            switcherService.qSysMonOpen = false;
+        }
+    }
+
+    IpcHandler {
+        target: "clipboard"
+
+        function open(): void {
+            switcherService.openClipboardManager();
+        }
+
+        function close(): void {
+            switcherService.clipboardOpen = false;
         }
     }
 

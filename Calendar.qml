@@ -98,7 +98,7 @@ PanelWindow {
 
             MouseArea {
                 anchors.fill: parent
-                onClicked: root.closeCalendar()
+                    onClicked: root.closeCalendar()
             }
         }
 
@@ -183,6 +183,7 @@ horizontalAlignment: Text.AlignHCenter
                             onClicked: root.shiftMonth(1)
                         }
                     }
+
                 }
 
                 GridLayout {
@@ -241,11 +242,44 @@ horizontalAlignment: Text.AlignHCenter
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light
+                        Layout.maximumWidth: 220
                         text: root.selectedDateLabel
                         color: "#94a3b8"
                         font.pixelSize: 11
                         elide: Text.ElideRight
+                    }
+
+                    RowLayout {
+                        spacing: 0
+
+                        Text {
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.weight: Font.Light
+                            text: Qt.formatDateTime(root.service.clockNow, "HH")
+                            color: "#94a3b8"
+                            font.pixelSize: 11
+                        }
+
+                        Text {
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.weight: Font.Light
+                            text: ":"
+                            color: root.service.clockColonVisible ? "#94a3b8" : "#414957"
+                            font.pixelSize: 11
+                        }
+
+                        Text {
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.weight: Font.Light
+                            text: Qt.formatDateTime(root.service.clockNow, "mm")
+                            color: "#94a3b8"
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
                     }
 
                     Rectangle {

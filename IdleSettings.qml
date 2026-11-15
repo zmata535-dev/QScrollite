@@ -346,7 +346,7 @@ font.pixelSize: 17
                         onValueModified: root.service.idleLockTimeout = value
                     }
 
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Empty workspace"; color: "#dce5f2"; font.pixelSize: 10 }
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Show on Empty Workspace"; color: "#dce5f2"; font.pixelSize: 10 }
                     ShellComboBox {
                         id: emptyWorkspaceActionBox
                         Layout.fillWidth: true
@@ -398,47 +398,47 @@ font.pixelSize: 17
                     }
                 }
 
-                RowLayout {
+                Rectangle { Layout.fillWidth: true; height: 1; color: "#283448" }
+
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "App & Column Switcher"
+                    color: "#abc7ff"
+                    font.pixelSize: 11}
+
+                GridLayout {
                     Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: 16
+                    rowSpacing: 2
                     ShellCheckBox {
-                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
                         font.pixelSize: 10
                         text: "Show RSS"
                         checked: root.service.showRssUsage
                         onToggled: root.service.showRssUsage = checked
                     }
                     ShellCheckBox {
-                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
                         font.pixelSize: 10
                         text: "Auto-hide"
                         checked: root.service.autoHideAppSwitcherOnPointerLeave
                         onToggled: root.service.autoHideAppSwitcherOnPointerLeave = checked
                     }
-                }
 
-                RowLayout {
-                    Layout.fillWidth: true
                     ShellCheckBox {
-                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
                         font.pixelSize: 10
                         text: "Top AppSwitcher"
                         checked: root.service.topAppSwitcherEnabled
                         onToggled: root.service.topAppSwitcherEnabled = checked
                     }
                     ShellCheckBox {
-                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
                         font.pixelSize: 10
                         text: "Bottom AppSwitcher"
                         checked: root.service.bottomAppSwitcherEnabled
                         onToggled: root.service.bottomAppSwitcherEnabled = checked
                     }
                 }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: "#283448" }
-
-                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Global column width presets"
-                    color: "#abc7ff"
-                    font.pixelSize: 11}
 
                 RowLayout {
                     Layout.fillWidth: true

@@ -25,16 +25,6 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-compact-clock-hotcorner"
     exclusionMode: ExclusionMode.Ignore
 
-    Timer {
-        id: closeOnExitTimer
-        interval: 300
-        repeat: false
-        onTriggered: {
-            if (!edge.service.compactClockCardHovered)
-                edge.service.closeCompactClock()
-        }
-    }
-
     MouseArea {
         width: parent.width * 0.20
         height: parent.height
@@ -44,10 +34,10 @@ PanelWindow {
             : Qt.NoButton
         hoverEnabled: true
         onEntered: {
-            closeOnExitTimer.stop()
+            edge.service.cancelCompactClockPointerExit()
             edge.service.showCompactClockFromEdge()
         }
-        onExited: closeOnExitTimer.restart()
+        onExited: edge.service.scheduleCompactClockPointerExit(300)
         onPressed: function(mouse) {
             if (!edge.service.compactClockOpen) return
             if (mouse.button === Qt.LeftButton) {

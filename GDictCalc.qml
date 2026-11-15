@@ -28,7 +28,6 @@ PanelWindow {
 
     property bool dictionaryMode: false
     property string expression: String(service.gDictCalcInitialQuery || "")
-    property string query: String(service.gDictCalcInitialQuery || "")
     property string statusText: ""
     property string lastGoogleQuery: ""
     property string lastGoogleUrl: ""
@@ -106,9 +105,9 @@ PanelWindow {
             root.close()
             event.accepted = true
         } else if (event.key === Qt.Key_D && (event.modifiers & Qt.ControlModifier)) {
-            root.dictionaryMode = true
+            root.dictionaryMode = false
             root.statusText = ""
-            Qt.callLater(function() { queryField.forceActiveFocus() })
+            Qt.callLater(function() { calcField.forceActiveFocus() })
             event.accepted = true
         }
     }
@@ -143,7 +142,7 @@ PanelWindow {
             statusText = "Wait for the current Google search to finish."
             return
         }
-        var value = query.trim()
+        var value = expression.trim()
         if (!value) {
             statusText = "Enter a word or value to search."
             return
@@ -164,6 +163,7 @@ PanelWindow {
 
         lastGoogleQuery = text
         lastGoogleUrl = "https://www.google.com/search?q=" + encodeURIComponent(text).replace(/%20/g, "+")
+        dictionaryMode = true
         googleSearchGeneration++
         googleSearchProcess.requestGeneration = googleSearchGeneration
         googleResultTitle = ""
@@ -180,16 +180,15 @@ PanelWindow {
     Component.onCompleted: {
         Qt.callLater(function() {
             if (root.visible) {
-                if (root.dictionaryMode) queryField.forceActiveFocus()
-                else calcField.forceActiveFocus()
+                calcField.forceActiveFocus()
             }
         })
     }
 
     onVisibleChanged: {
         if (visible) Qt.callLater(function() {
-            if (root.dictionaryMode) queryField.forceActiveFocus()
-            else calcField.forceActiveFocus()
+            if (root.dictionaryMode) return
+            calcField.forceActiveFocus()
         })
     }
 
@@ -226,7 +225,7 @@ PanelWindow {
                     Layout.fillWidth: true
 
                     Text {
-                        text: root.dictionaryMode ? "Google Dictionary" : "GDictCalc · Scientific"
+                        text: root.dictionaryMode ? "Google result" : "GDictCalc · Scientific"
                         color: "#e2e8f0"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 17
@@ -235,13 +234,16 @@ PanelWindow {
                     Item { Layout.fillWidth: true }
 
                     ShellButton {
-                        text: root.dictionaryMode ? "← Calculator" : "Dictionary →"
+                        visible: root.dictionaryMode
+                        text: "Calculator"
                         onClicked: {
-                            root.dictionaryMode = !root.dictionaryMode
+                            root.dictionaryMode = false
                             root.statusText = ""
+                            root.lastGoogleUrl = ""
+                            root.googleResultTitle = ""
+                            root.googleResultText = ""
                             Qt.callLater(function() {
-                                if (root.dictionaryMode) queryField.forceActiveFocus()
-                                else calcField.forceActiveFocus()
+                                calcField.forceActiveFocus()
                             })
                         }
                     }
@@ -253,33 +255,112 @@ PanelWindow {
                 }
 
                 ColumnLayout {
-                    visible: !root.dictionaryMode
                     Layout.fillWidth: true
                     spacing: 8
 
                     ShellTextField {
                         id: calcField
+                        visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        placeholderText: "Scientific expression · sin(30), sqrt(2), pi^2"
+                        placeholderText: "Expression, word, amount, currency, or product"
                         text: root.expression
+                        rightPadding: 38
                         selectByMouse: true
                         onTextEdited: root.expression = text
                         onAccepted: root.calculate()
                         Keys.onPressed: function(event) { root.handleShortcut(event) }
+
+                        ShellButton {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 28
+                            height: 24
+                            visible: calcField.text.length > 0
+                            text: "×"
+                            onClicked: {
+                                root.expression = ""
+                                calcField.forceActiveFocus()
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        visible: !root.dictionaryMode
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text { text: "Translate to"; color: "#94a3b8"; font.pixelSize: 11 }
+                        ShellComboBox {
+                            id: languageSelect
+                            Layout.fillWidth: true
+                            model: root.languages
+                            currentIndex: 0
+                        }
+                    }
+
+                    RowLayout {
+                        visible: !root.dictionaryMode
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Text { text: "Convert"; color: "#94a3b8"; font.pixelSize: 11 }
+                        ShellComboBox {
+                            id: convertCategory
+                            Layout.preferredWidth: 125
+                            model: ["Currencies", "Length", "Weight", "Tech units", "Custom"]
+                            onActivated: targetSelect.currentIndex = 0
+                        }
+                        ShellComboBox {
+                            id: targetSelect
+                            Layout.fillWidth: true
+                            visible: convertCategory.currentIndex !== 4
+                            model: root.targetOptions
+                            currentIndex: 0
+                        }
+                        ShellTextField {
+                            id: customTarget
+                            Layout.fillWidth: true
+                            visible: convertCategory.currentIndex === 4
+                            placeholderText: "Enter target unit or currency"
+                            onAccepted: root.searchGoogle("convert")
+                        }
+                    }
+
+                    RowLayout {
+                        visible: !root.dictionaryMode
+                        Layout.fillWidth: true
+                        spacing: 8
+                        ShellButton {
+                            Layout.fillWidth: true
+                            text: "Translate"
+                            accent: true
+                            onClicked: root.searchGoogle("translate")
+                        }
+                        ShellButton {
+                            Layout.fillWidth: true
+                            text: "Convert"
+                            accent: true
+                            onClicked: root.searchGoogle("convert")
+                        }
+                        ShellButton {
+                            Layout.fillWidth: true
+                            text: "Price"
+                            accent: true
+                            onClicked: root.searchGoogle("price")
+                        }
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 48
+                        Layout.preferredHeight: root.dictionaryMode
+                            ? Math.min(260, resultColumn.implicitHeight + 20) : 48
                         radius: 7
                         color: "#161d2a"
                         border.color: "#2b364a"
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 8
-
+                            anchors.margins: 8
+                            visible: !root.dictionaryMode
                             Text {
                                 Layout.fillWidth: true
                                 text: root.calculationResult || (root.expression.length ? "Invalid expression" : "Enter an expression")
@@ -288,16 +369,77 @@ PanelWindow {
                                 font.pixelSize: 16
                                 elide: Text.ElideRight
                             }
-
                             ShellButton {
                                 text: "Copy"
                                 enabled: !!root.calculationResult
                                 onClicked: root.copyCalculation()
                             }
                         }
+
+                        ColumnLayout {
+                            id: resultColumn
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 6
+                            visible: root.dictionaryMode
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.statusText
+                                visible: text.length > 0
+                                color: "#c4ccda"
+                                font.family: "JetBrainsMono Nerd Font Mono"
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: root.googleResultTitle
+                                visible: text.length > 0
+                                color: "#abc7ff"
+                                font.family: "JetBrainsMono Nerd Font Mono"
+                                font.pixelSize: 12
+                                font.bold: true
+                                wrapMode: Text.Wrap
+                            }
+                            Flickable {
+                                id: googleAnswerFlickable
+                                visible: root.googleResultText.length > 0
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Math.min(210, googleAnswerText.implicitHeight)
+                                contentWidth: width
+                                contentHeight: googleAnswerText.implicitHeight
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+                                Text {
+                                    id: googleAnswerText
+                                    width: googleAnswerFlickable.width
+                                    text: root.googleResultText
+                                    color: "#e2e8f0"
+                                    font.family: "JetBrainsMono Nerd Font Mono"
+                                    font.pixelSize: 11
+                                    wrapMode: Text.Wrap
+                                }
+                                ScrollBar.vertical: ScrollBar { }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: root.lastGoogleUrl.length > 0
+                                text: "Open Google search ↗"
+                                color: "#abc7ff"
+                                font.family: "JetBrainsMono Nerd Font Mono"
+                                font.pixelSize: 11
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally(root.lastGoogleUrl)
+                                }
+                            }
+                        }
                     }
 
                     GridLayout {
+                        visible: !root.dictionaryMode
                         Layout.fillWidth: true
                         columns: 4
                         rowSpacing: 5
@@ -331,6 +473,7 @@ PanelWindow {
                     }
 
                     Text {
+                        visible: !root.dictionaryMode
                         Layout.fillWidth: true
                         text: "Trig functions use degrees · ^ for powers · ! for factorial"
                         color: "#8290a7"
@@ -340,159 +483,6 @@ PanelWindow {
                     }
                 }
 
-                ColumnLayout {
-                    visible: root.dictionaryMode
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    ShellTextField {
-                        id: queryField
-                        Layout.fillWidth: true
-                        placeholderText: "Word, amount, currency, or product"
-                        text: root.query
-                        selectByMouse: true
-                        onTextEdited: root.query = text
-                        onAccepted: root.searchGoogle("translate")
-                        Keys.onPressed: function(event) { root.handleShortcut(event) }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Text { text: "Translate to"; color: "#94a3b8"; font.pixelSize: 11 }
-                        ShellComboBox {
-                            id: languageSelect
-                            Layout.fillWidth: true
-                            model: root.languages
-                            currentIndex: 0
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        visible: true
-                        Text { text: "Convert"; color: "#94a3b8"; font.pixelSize: 11 }
-                        ShellComboBox {
-                            id: convertCategory
-                            Layout.preferredWidth: 125
-                            model: ["Currencies", "Length", "Weight", "Tech units", "Custom"]
-                            onActivated: targetSelect.currentIndex = 0
-                        }
-                        ShellComboBox {
-                            id: targetSelect
-                            Layout.fillWidth: true
-                            visible: convertCategory.currentIndex !== 4
-                            model: root.targetOptions
-                            currentIndex: 0
-                        }
-                        ShellTextField {
-                            id: customTarget
-                            Layout.fillWidth: true
-                            visible: convertCategory.currentIndex === 4
-                            placeholderText: "Enter target unit or currency"
-                            onAccepted: root.searchGoogle("convert")
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        ShellButton {
-                            Layout.fillWidth: true
-                            text: "Translate"
-                            accent: true
-                            onClicked: root.searchGoogle("translate")
-                        }
-                        ShellButton {
-                            Layout.fillWidth: true
-                            text: "Convert"
-                            accent: true
-                            onClicked: root.searchGoogle("convert")
-                        }
-                        ShellButton {
-                            Layout.fillWidth: true
-                            text: "Price"
-                            accent: true
-                            onClicked: root.searchGoogle("price")
-                        }
-                    }
-
-                    Rectangle {
-                        visible: root.statusText.length > 0 || root.googleResultText.length > 0
-                        Layout.fillWidth: true
-                        implicitHeight: resultColumn.implicitHeight + 20
-                        radius: 8
-                        color: "#161d2a"
-                        border.color: "#2b364a"
-
-                        ColumnLayout {
-                            id: resultColumn
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 6
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.statusText
-                                visible: text.length > 0
-                                color: "#c4ccda"
-                                font.family: "JetBrainsMono Nerd Font Mono"
-                                font.pixelSize: 11
-                                wrapMode: Text.Wrap
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                text: root.googleResultTitle
-                                visible: text.length > 0
-                                color: "#abc7ff"
-                                font.family: "JetBrainsMono Nerd Font Mono"
-                                font.pixelSize: 12
-                                font.bold: true
-                                wrapMode: Text.Wrap
-                            }
-
-                            Flickable {
-                                id: googleAnswerFlickable
-                                visible: root.googleResultText.length > 0
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: Math.min(240, googleAnswerText.implicitHeight)
-                                contentWidth: width
-                                contentHeight: googleAnswerText.implicitHeight
-                                clip: true
-                                boundsBehavior: Flickable.StopAtBounds
-
-                                Text {
-                                    id: googleAnswerText
-                                    width: googleAnswerFlickable.width
-                                    text: root.googleResultText
-                                    color: "#e2e8f0"
-                                    font.family: "JetBrainsMono Nerd Font Mono"
-                                    font.pixelSize: 11
-                                    wrapMode: Text.Wrap
-                                }
-
-                                ScrollBar.vertical: ScrollBar { }
-                            }
-
-                            Text {
-                                Layout.fillWidth: true
-                                visible: root.lastGoogleUrl.length > 0
-                                text: "Open Google search ↗"
-                                color: "#abc7ff"
-                                font.family: "JetBrainsMono Nerd Font Mono"
-                                font.pixelSize: 11
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(root.lastGoogleUrl)
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }

@@ -198,6 +198,10 @@ font.pixelSize: 14
                             font.pixelSize: 13
                             clip: true
                             selectByMouse: true
+                            Keys.onEscapePressed: function(event) {
+                                service.closeSelector();
+                                event.accepted = true;
+                            }
                             onTextChanged: {
                                 selectorWindow.searchQuery = text;
                             }

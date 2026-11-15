@@ -28,7 +28,7 @@ Item {
             color: mouse.containsMouse
                 ? (root.action === "shutdown" || root.action === "reboot" ? "#ffb3ba" : "#abc7ff")
                 : "#8092ab"
-            font.pixelSize: 14
+            font.pixelSize: 20
         }
 
         MouseArea {

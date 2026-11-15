@@ -33,6 +33,9 @@ QtObject {
     property string appMenuInitialText: ""
     property bool gDictCalcOpen: false
     property string gDictCalcInitialQuery: ""
+    property bool qSysMonOpen: false
+    property bool clipboardOpen: false
+    property var clipboardHistory: []
     property bool calendarOpen: false
     property bool calendarPending: false
     property bool clockOpen: false
@@ -47,6 +50,14 @@ QtObject {
     property bool compactClockControlsHovered: false
     readonly property bool compactClockCardHovered:
         compactClockClockHovered || compactClockControlsHovered
+    property var compactClockPointerExitTimer: Timer {
+        interval: 240
+        repeat: false
+        onTriggered: {
+            if (!service.compactClockCardHovered)
+                service.closeCompactClock();
+        }
+    }
     property bool clockCloseRequested: false
     property bool clockSlideCloseRequested: false
     property bool idleConfigOpen: false
@@ -98,6 +109,7 @@ QtObject {
     property string activeWorkspaceId: ""
     property string lastEmptyWorkspaceKey: ""
     property bool isRefreshing: false
+    property bool refreshPending: false
 
     readonly property int unreadNotificationCount: notificationService ? notificationService.unread.length : 0
     readonly property bool doNotDisturb: notificationService ? notificationService.doNotDisturb : false
@@ -262,7 +274,6 @@ QtObject {
         stdout: StdioCollector {
             onTextChanged: {
                 if (!text || text.trim().length === 0) {
-                    service.isRefreshing = false;
                     return;
                 }
 
@@ -280,8 +291,32 @@ QtObject {
                 } catch(e) {
                     console.log("[WindowSwitcher] Error parsing windows:", e);
                 }
-                service.isRefreshing = false;
             }
+        }
+        onExited: {
+            service.isRefreshing = false;
+            if (service.refreshPending) {
+                service.refreshPending = false;
+                service.refresh();
+            }
+        }
+    }
+
+    property var hyprlandEventSocket: Socket {
+        id: hyprlandEventSocket
+        path: {
+            var runtimeDir = Quickshell.env("XDG_RUNTIME_DIR") || "/run/user/1000";
+            var signature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "";
+            return runtimeDir + "/hypr/" + signature + "/.socket2.sock";
+        }
+        connected: service.activeCompositor === "hyprland"
+            && !!Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
+        parser: SplitParser {
+            splitMarker: "\n"
+            onRead: function(data) { service.handleHyprlandEvent(data); }
+        }
+        onConnectionStateChanged: {
+            if (connected) service.refresh();
         }
     }
 
@@ -334,6 +369,7 @@ QtObject {
                 icon: icon,
                 workspaceId: wsId,
                 workspaceName: wsName,
+                floating: !!c.floating,
                 x: (c.at && c.at.length > 0) ? c.at[0] : 0,
                 y: (c.at && c.at.length > 1) ? c.at[1] : 0,
                 width: (c.size && c.size.length > 0) ? c.size[0] : 0,
@@ -422,6 +458,7 @@ QtObject {
                 icon: icon,
                 workspaceId: wsId,
                 workspaceName: wsId.toString(),
+                floating: !!w.is_floating,
                 x: colIdx,
                 y: rowIdx,
                 width: (w.layout && w.layout.window_size) ? w.layout.window_size[0] : 0,
@@ -453,10 +490,26 @@ QtObject {
     }
 
     function refresh() {
-        if (isRefreshing) return;
+        if (isRefreshing) {
+            refreshPending = true;
+            return;
+        }
         isRefreshing = true;
         detectCompositor();
         fetchProc.running = true;
+    }
+
+    function handleHyprlandEvent(eventData) {
+        var eventName = String(eventData || "").split(">>")[0];
+        var updateEvents = [
+            "workspace", "workspacev2", "focusedmon", "focusedmonv2",
+            "openwindow", "closewindow", "movewindow", "movewindowv2",
+            "activewindow", "activewindowv2", "windowtitle", "windowtitlev2",
+            "changefloatingmode", "createworkspace", "createworkspacev2",
+            "destroyworkspace", "destroyworkspacev2"
+        ];
+        if (updateEvents.indexOf(eventName) !== -1)
+            refresh();
     }
 
     function updateEmptyWorkspaceAction(isEmpty) {
@@ -470,7 +523,7 @@ QtObject {
         if (lastEmptyWorkspaceKey === key) return;
         lastEmptyWorkspaceKey = key;
 
-        if (open || appMenuOpen || appMenuPending || gDictCalcOpen || calendarOpen || calendarPending ||
+        if (open || appMenuOpen || appMenuPending || gDictCalcOpen || qSysMonOpen || calendarOpen || calendarPending ||
                 clockOpen || idleConfigOpen || compactClockOpen || compactClockPending)
             return;
 
@@ -484,9 +537,9 @@ QtObject {
     // empty-workspace actions still notice workspace changes without constant
     // compositor polling.
     property var refreshTimer: Timer {
-        interval: service.open ? 500 : 5000
+        interval: service.open || service.emptyWorkspaceAction !== "none" ? 500 : 5000
         repeat: true
-        running: true
+        running: service.activeCompositor !== "hyprland" || !hyprlandEventSocket.connected
         onTriggered: {
             service.refresh();
         }
@@ -496,7 +549,7 @@ QtObject {
     property var clockTimer: Timer {
         interval: 1000
         repeat: true
-        running: service.open || service.clockOpen || service.compactClockOpen
+        running: service.open || service.clockOpen || service.compactClockOpen || service.calendarOpen
         onTriggered: {
             service.clockNow = new Date()
             service.clockTickCount++
@@ -725,7 +778,7 @@ QtObject {
         }
     }
 
-    function focusWindow(win) {
+    function focusWindow(win, keepSwitcherOpen) {
         if (!win || win.id === undefined) return;
 
         if (activeCompositor === "niri") {
@@ -733,7 +786,7 @@ QtObject {
         } else {
             Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.focus({ window = \"address:" + win.id + "\" })"]);
         }
-        closeSwitcher(true);
+        if (keepSwitcherOpen !== true) closeSwitcher(true);
     }
 
     function focusNotificationSender(notification) {
@@ -1087,6 +1140,7 @@ QtObject {
         interval: 100
         repeat: false
         onTriggered: {
+            interval = 100;
             service.calendarPending = false;
             service.calendarOpen = true;
         }
@@ -1108,7 +1162,7 @@ QtObject {
             if (service.compactClockOnMediaPlaying && service.hasPlayingMedia())
                 return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen ||
+            if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen || service.qSysMonOpen ||
                     service.calendarOpen || service.calendarPending || service.idleConfigOpen ||
                     service.wallpaperToggleTimer.running || wallpaperOpen) {
                 restart();
@@ -1126,7 +1180,7 @@ QtObject {
         onTriggered: {
             if (!service.compactClockPending) return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen) {
+            if (service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen || service.qSysMonOpen) {
                 service.compactClockPending = false;
                 return;
             }
@@ -1143,8 +1197,19 @@ QtObject {
 
     function openCalendar() {
         closeSwitcher();
+        var clockWasVisible = clockOpen || compactClockOpen;
+        suspendClocksForCalendar();
         calendarPending = true;
+        calendarTimer.interval = clockWasVisible ? 520 : 100;
         calendarTimer.restart();
+    }
+
+    function suspendClocksForCalendar() {
+        compactClockOpenTimer.stop();
+        compactClockPending = false;
+        closeCompactClock();
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose();
     }
 
     function hasPlayingMedia() {
@@ -1156,7 +1221,7 @@ QtObject {
     }
 
     function openCalendarFromCompactClock() {
-        closeCompactClock();
+        suspendClocksForCalendar();
         closeSwitcher();
         calendarPending = true;
         if (unreadNotificationCount > 0 && notificationService)
@@ -1211,6 +1276,11 @@ QtObject {
     }
 
     function requestCompactClock() {
+        if (calendarOpen || calendarPending) {
+            compactClockOpenTimer.stop();
+            compactClockPending = false;
+            return;
+        }
         if (!compactClockEnabled) return;
         if (open || appMenuOpen || appMenuPending || gDictCalcOpen) {
             compactClockOpenTimer.stop();
@@ -1241,6 +1311,7 @@ QtObject {
     }
 
     function closeCompactClock(toCenter) {
+        compactClockPointerExitTimer.stop();
         if (compactClockPending) {
             compactClockPending = false;
             compactClockOpenTimer.stop();
@@ -1248,6 +1319,15 @@ QtObject {
         if (!compactClockOpen || compactClockClosing) return;
         compactClockCloseToCenter = toCenter === true;
         compactClockClosing = true;
+    }
+
+    function scheduleCompactClockPointerExit(delayMs) {
+        compactClockPointerExitTimer.interval = Math.max(1, Number(delayMs) || 240);
+        compactClockPointerExitTimer.restart();
+    }
+
+    function cancelCompactClockPointerExit() {
+        compactClockPointerExitTimer.stop();
     }
 
     function finishCompactClockClose() {
@@ -1366,6 +1446,59 @@ QtObject {
         appMenuPending = false;
         appMenuOpen = false;
         gDictCalcOpen = true;
+    }
+
+    function openQSysMon() {
+        cancelCompactClockForAppPanels();
+        closeSwitcher(true);
+        appMenuTimer.stop();
+        appMenuPending = false;
+        appMenuOpen = false;
+        gDictCalcOpen = false;
+        calendarTimer.stop();
+        calendarPending = false;
+        calendarOpen = false;
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose();
+        idleConfigOpen = false;
+        if (wallpaperService) wallpaperService.closeSelector();
+        qSysMonOpen = true;
+    }
+
+    function rememberClipboardText(text) {
+        var value = String(text || "");
+        if (!value.length) return;
+        if (clipboardHistory.length && clipboardHistory[0] === value) return;
+        var next = clipboardHistory.filter(function(item) { return item !== value; });
+        next.unshift(value);
+        clipboardHistory = next.slice(0, 50);
+    }
+
+    function openClipboardManager() {
+        cancelCompactClockForAppPanels();
+        closeSwitcher(true);
+        appMenuTimer.stop();
+        appMenuPending = false;
+        appMenuOpen = false;
+        gDictCalcOpen = false;
+        qSysMonOpen = false;
+        calendarTimer.stop();
+        calendarPending = false;
+        calendarOpen = false;
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose();
+        idleConfigOpen = false;
+        if (wallpaperService) wallpaperService.closeSelector();
+        clipboardOpen = true;
+    }
+
+    function copyClipboardHistoryItem(text) {
+        Quickshell.clipboardText = String(text || "");
+        clipboardOpen = false;
+    }
+
+    function clearClipboardHistory() {
+        clipboardHistory = [];
     }
 
     Component.onCompleted: {
