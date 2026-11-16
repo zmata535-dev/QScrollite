@@ -28,6 +28,7 @@ PanelWindow {
     property int openPresetMenuIndex: -1
     property var focusedNoteField: null
     property var noteItems: []
+    readonly property int cornerRadius: 8
     readonly property var pastelPalette: [
         { name: "Blue", color: "#3F536B" },
         { name: "Lavender", color: "#554B68" },
@@ -205,7 +206,8 @@ PanelWindow {
         height: Math.min(680, root.height - 32)
         x: root.slideOffset
         y: Math.max(16, Math.round((root.height - height) / 2))
-        radius: 14
+        radius: root.cornerRadius
+        opacity: root.focusedNoteField ? 1 : 0.92
         color: "#111722"
         border.color: "#3b4a63"
         border.width: 1
@@ -233,7 +235,7 @@ PanelWindow {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 8
-            spacing: 6
+            spacing: 3
 
             RowLayout {
                 Layout.fillWidth: true
@@ -254,6 +256,12 @@ PanelWindow {
                     implicitHeight: 23
                     font.pixelSize: 15
                     text: "+"
+                    background: Rectangle {
+                        radius: root.cornerRadius
+                        color: parent.hovered ? "#273650" : "#161d2a"
+                        border.width: 1
+                        border.color: parent.hovered ? "#abc7ff" : "#2b364a"
+                    }
                     onClicked: {
                         root.openPresetMenuIndex = -1
                         root.addNote()
@@ -266,6 +274,12 @@ PanelWindow {
                     implicitHeight: 23
                     font.pixelSize: 12
                     text: "×"
+                    background: Rectangle {
+                        radius: root.cornerRadius
+                        color: parent.hovered ? "#273650" : "#161d2a"
+                        border.width: 1
+                        border.color: parent.hovered ? "#abc7ff" : "#2b364a"
+                    }
                     onClicked: {
                         root.openPresetMenuIndex = -1
                         root.close()
@@ -273,12 +287,17 @@ PanelWindow {
                 }
             }
 
-            ListView {
-                id: noteList
+            Item {
+                id: noteListContainer
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+
+                ListView {
+                id: noteList
+                anchors.fill: parent
                 clip: true
                 spacing: 8
+                leftMargin: 12
                 model: root.noteItems
                 boundsBehavior: Flickable.StopAtBounds
 
@@ -295,11 +314,11 @@ PanelWindow {
                         root.openPresetMenuIndex = -1
                     }
                     readonly property bool presetMenuOpen: root.openPresetMenuIndex === index
-                    width: noteList.width
+                    width: noteList.width - noteList.leftMargin
                     height: 138
-                    radius: 10
+                    radius: root.cornerRadius
                     z: presetMenuOpen ? 10 : 0
-                    color: root.noteBackground(modelData.color)
+                    color: Qt.darker(modelData.color, 1.35)
                     border.color: Qt.darker(modelData.color, 1.35)
                     border.width: 1
                     readonly property bool noteControlsVisible:
@@ -315,7 +334,7 @@ PanelWindow {
                         y: 26
                         width: 158
                         height: 78
-                        radius: 7
+                        radius: root.cornerRadius
                         visible: noteItemCard.presetMenuOpen
                         z: 20
                         color: "#111722"
@@ -335,7 +354,7 @@ PanelWindow {
                                 height: 22
                                 font.pixelSize: 9
                                 text: "Blue"
-                                background: Rectangle { radius: 4; color: root.noteBackground(root.pastelPalette[0].color); border.width: 0 }
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[0].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(0)
                             }
                             ShellButton {
@@ -343,7 +362,7 @@ PanelWindow {
                                 height: 22
                                 font.pixelSize: 9
                                 text: "Lavender"
-                                background: Rectangle { radius: 4; color: root.noteBackground(root.pastelPalette[1].color); border.width: 0 }
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[1].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(1)
                             }
                             ShellButton {
@@ -351,7 +370,7 @@ PanelWindow {
                                 height: 22
                                 font.pixelSize: 9
                                 text: "Pink"
-                                background: Rectangle { radius: 4; color: root.noteBackground(root.pastelPalette[2].color); border.width: 0 }
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[2].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(2)
                             }
                             ShellButton {
@@ -359,7 +378,7 @@ PanelWindow {
                                 height: 22
                                 font.pixelSize: 9
                                 text: "Peach"
-                                background: Rectangle { radius: 4; color: root.noteBackground(root.pastelPalette[3].color); border.width: 0 }
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[3].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(3)
                             }
                             ShellButton {
@@ -367,7 +386,7 @@ PanelWindow {
                                 height: 22
                                 font.pixelSize: 9
                                 text: "Yellow"
-                                background: Rectangle { radius: 4; color: root.noteBackground(root.pastelPalette[4].color); border.width: 0 }
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[4].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(4)
                             }
                             ShellButton {
@@ -375,7 +394,7 @@ PanelWindow {
                                 height: 22
                                 font.pixelSize: 9
                                 text: "Mint"
-                                background: Rectangle { radius: 4; color: root.noteBackground(root.pastelPalette[5].color); border.width: 0 }
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[5].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(5)
                             }
                         }
@@ -388,7 +407,7 @@ PanelWindow {
                         RowLayout {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 24
-                            spacing: 3
+                            spacing: 0
 
                             ShellTextField {
                                 id: noteTitle
@@ -401,7 +420,9 @@ PanelWindow {
                                 text: noteItemCard.modelData.title || ""
                                 background: Rectangle {
                                     color: Qt.darker(noteItemCard.modelData.color, 1.35)
-                                    radius: 4
+                                    radius: root.cornerRadius
+                                    bottomLeftRadius: 0
+                                    bottomRightRadius: 0
                                     border.width: 0
                                 }
                                 onActiveFocusChanged: {
@@ -414,8 +435,8 @@ PanelWindow {
 
                             ShellButton {
                                 id: noteColorButton
-                                Layout.preferredWidth: 82
-                                implicitWidth: 82
+                                Layout.preferredWidth: 76
+                                implicitWidth: 76
                                 implicitHeight: 23
                                 font.pixelSize: 9
                                 text: {
@@ -424,8 +445,24 @@ PanelWindow {
                                             return root.pastelPalette[i].name
                                     return root.pastelPalette[1].name
                                 }
-                                opacity: noteItemCard.noteControlsVisible ? 1 : 0
+                                opacity: 1
                                 enabled: true
+                                background: Rectangle {
+                                    radius: root.cornerRadius
+                                    color: Qt.darker(noteItemCard.modelData.color,
+                                        !noteItemCard.noteControlsVisible ? 1.35
+                                        : (noteColorButton.hovered ? 1.9 : 1.6))
+                                    border.width: 0
+                                }
+                                contentItem: Text {
+                                    text: noteColorButton.text
+                                    color: noteItemCard.noteControlsVisible
+                                        ? Qt.lighter(noteItemCard.modelData.color, 1.7) : "transparent"
+                                    font: noteColorButton.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
                                 onClicked: {
                                     root.openPresetMenuIndex = noteItemCard.presetMenuOpen
                                         ? -1 : noteItemCard.index
@@ -433,19 +470,28 @@ PanelWindow {
                             }
 
                             ShellButton {
-                                Layout.preferredWidth: 24
-                                implicitWidth: 24
+                                id: noteDeleteButton
+                                Layout.preferredWidth: 22
+                                implicitWidth: 22
                                 implicitHeight: 23
                                 font.pixelSize: 12
-                                danger: true
-                                text: "×"
-                                opacity: noteItemCard.noteControlsVisible ? 1 : 0
+                                text: "󰆴"
+                                opacity: 1
                                 enabled: noteItemCard.noteControlsVisible
                                 background: Rectangle {
-                                    radius: 6
-                                    color: root.noteBackground(noteItemCard.modelData.color)
-                                    border.width: 1
-                                    border.color: Qt.lighter(noteItemCard.modelData.color, 1.7)
+                                    radius: root.cornerRadius
+                                    color: Qt.darker(noteItemCard.modelData.color,
+                                        !noteItemCard.noteControlsVisible ? 1.35
+                                        : (noteDeleteButton.hovered ? 1.9 : 1.6))
+                                    border.width: 0
+                                }
+                                contentItem: Text {
+                                    text: noteDeleteButton.text
+                                    color: noteItemCard.noteControlsVisible
+                                        ? Qt.lighter(noteItemCard.modelData.color, 1.7) : "transparent"
+                                    font: noteDeleteButton.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
                                 }
                                 onClicked: {
                                     root.openPresetMenuIndex = -1
@@ -469,7 +515,7 @@ PanelWindow {
                             padding: 0
                             background: Rectangle {
                                 color: Qt.darker(noteItemCard.modelData.color, 1.35)
-                                radius: 7
+                                radius: root.cornerRadius
                                 border.width: 0
                             }
                             onActiveFocusChanged: {
@@ -485,7 +531,12 @@ PanelWindow {
                     }
                 }
 
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar {
+                    parent: noteListContainer
+                    anchors.top: noteList.top
+                    anchors.left: noteList.left
+                    anchors.bottom: noteList.bottom
+                }
 
                 Text {
                     anchors.centerIn: parent
@@ -495,6 +546,7 @@ PanelWindow {
                     font.family: "JetBrainsMono Nerd Font Mono"
                     font.pixelSize: 10
                 }
+            }
             }
         }
     }
