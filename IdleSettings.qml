@@ -45,6 +45,7 @@ PanelWindow {
 
     function closeCard() {
         service.idleConfigOpen = false
+        service.refreshEmptyWorkspaceActionSelection()
     }
 
     function toggleClockPreview() {
@@ -351,11 +352,12 @@ font.pixelSize: 17
                         id: emptyWorkspaceActionBox
                         Layout.fillWidth: true
                         font.pixelSize: 9
-                        model: ["Nothing", "Clock card", "AppSwitcher"]
+                        model: ["Nothing", "Clock card", "AppSwitcher", "Calendar"]
                         currentIndex: root.service.emptyWorkspaceAction === "clock" ? 1
-                            : (root.service.emptyWorkspaceAction === "switcher" ? 2 : 0)
+                            : (root.service.emptyWorkspaceAction === "switcher" ? 2
+                            : (root.service.emptyWorkspaceAction === "calendar" ? 3 : 0))
                         onActivated: function(index) {
-                            root.service.emptyWorkspaceAction = ["none", "clock", "switcher"][index]
+                            root.service.selectEmptyWorkspaceAction(["none", "clock", "switcher", "calendar"][index])
                         }
                     }
 

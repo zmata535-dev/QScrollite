@@ -22,7 +22,8 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-clock"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    mask: Region { }
 
     property var now: service.clockNow
     property bool colonVisible: service.clockColonVisible
@@ -31,15 +32,34 @@ PanelWindow {
     property int fractureSeed: 1
     readonly property real closeFade: Math.max(fractureProgress, slideCloseProgress)
     readonly property string dateLabel: Qt.formatDate(now, "dddd, dd MMM yyyy")
+    property string focusAtOpen: String(service.activeWindowId || "")
+    readonly property bool otherComponentOpen: service.open || service.appMenuOpen || service.appMenuPending
+        || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen || service.clipboardOpen
+        || service.bluetoothOpen || service.calendarOpen || service.idleConfigOpen
+        || (service.wallpaperService && service.wallpaperService.selectorOpen)
+        || (service.notificationService && service.notificationService.notificationCenterOpen)
 
-    Timer {
-        id: pointerStartupGuard
-        interval: 350
-        repeat: false
+    function closeOnFocusLoss() {
+        if (!service.clockOpen || service.activeWorkspaceEmpty) return
+        service.requestClockClose()
     }
 
-    function closeClock() {
-        service.requestClockClose()
+    onOtherComponentOpenChanged: {
+        if (otherComponentOpen) closeOnFocusLoss()
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            var newFocus = String(root.service.activeWindowId || "")
+            if (newFocus === root.focusAtOpen) return
+            root.focusAtOpen = newFocus
+            Qt.callLater(function() { root.closeOnFocusLoss() })
+        }
+        function onActiveWorkspaceEmptyChanged() {
+            if (!root.service.activeWorkspaceEmpty && root.otherComponentOpen)
+                root.closeOnFocusLoss()
+        }
     }
 
     function startFracture() {
@@ -56,6 +76,15 @@ PanelWindow {
     }
 
     function finishClockClose() {
+        if (service.emptyWorkspaceComponentIsPinned("clock")) {
+            fractureAnimation.stop()
+            slideCloseAnimation.stop()
+            service.clockCloseRequested = false
+            service.clockSlideCloseRequested = false
+            fractureProgress = 0
+            slideCloseProgress = 0
+            return
+        }
         service.clockOpen = false
         service.clockCloseRequested = false
         service.clockSlideCloseRequested = false
@@ -94,36 +123,19 @@ PanelWindow {
     }
 
     Item {
-        id: keyCatcher
+        id: clockSurface
         anchors.fill: parent
-        focus: true
-
-        Keys.onPressed: function(event) {
-            root.closeClock()
-            event.accepted = true
-        }
 
         Rectangle {
             anchors.fill: parent
             color: "#35080c16"
             opacity: 1 - root.closeFade
-
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                onPositionChanged: {
-                    if (!pointerStartupGuard.running) root.closeClock()
-                }
-                onPressed: root.closeClock()
-                onClicked: root.closeClock()
-                onWheel: root.closeClock()
-            }
         }
 
         GlowBorder {
             targetItem: card
             cornerRadius: card.radius
-            opacity: 1 - root.closeFade
+            opacity: 0.1 - root.closeFade
         }
 
         Rectangle {
@@ -132,24 +144,13 @@ PanelWindow {
             height: 212
             anchors.centerIn: parent
             radius: 14
-            color: Qt.rgba(17 / 255, 23 / 255, 34 / 255, root.service.clockCardBackgroundOpacity / 100)
+            color: Qt.rgba(17 / 255, 23 / 255, 34 / 255, root.service.clockCardBackgroundOpacity / 1000)
             border.color: "#3b4a63"
-            border.width: 1
+            border.width: 0
             opacity: 1 - root.closeFade
             scale: 1 - root.slideCloseProgress * 0.82
             transform: Translate {
                 y: -((root.height + card.height) / 2) * root.slideCloseProgress
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                onPositionChanged: {
-                    if (!pointerStartupGuard.running) root.closeClock()
-                }
-                onPressed: root.closeClock()
-                onClicked: root.closeClock()
-                onWheel: root.closeClock()
             }
 
             ColumnLayout {
@@ -174,7 +175,7 @@ horizontalAlignment: Text.AlignRight
                         text: ":"
                         color: root.service.idleClockTextColor
                         opacity: root.colonVisible ? 1 : 0.18
-font.pixelSize: root.service.idleClockTextSize * 0.94
+font.pixelSize: root.service.idleClockTextSize * 0.92
 horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -229,9 +230,8 @@ horizontalAlignment: Text.AlignLeft
     }
 
     Component.onCompleted: {
-        pointerStartupGuard.start()
         Qt.callLater(function() {
-            keyCatcher.forceActiveFocus()
+            root.focusAtOpen = String(root.service.activeWindowId || "")
             root.startFracture()
             root.startSlideClose()
         })

@@ -86,9 +86,7 @@ QtObject {
         if (!item) return;
         var notification = item.notification;
         if (switcherService) {
-            switcherService.calendarTimer.stop();
-            switcherService.calendarPending = false;
-            switcherService.calendarOpen = false;
+            switcherService.closeCalendar();
         }
         markRead(item.id);
         notificationCenterOpen = false;

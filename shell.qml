@@ -457,9 +457,7 @@ ShellRoot {
         }
 
         function close(): void {
-            switcherService.calendarTimer.stop();
-            switcherService.calendarPending = false;
-            switcherService.calendarOpen = false;
+            switcherService.closeCalendar();
         }
     }
 

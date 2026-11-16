@@ -116,9 +116,21 @@ QtObject {
     property string activeCompositor: "hyprland"
     property string activeWindowId: ""
     property string activeWorkspaceId: ""
+    property bool activeWorkspaceEmpty: false
+    property string pendingEmptyWorkspaceClose: ""
     property string lastEmptyWorkspaceKey: ""
     property bool isRefreshing: false
     property bool refreshPending: false
+    property var emptyWorkspaceSelectionTimer: Timer {
+        interval: 600
+        repeat: false
+        onTriggered: {
+            if (service.activeWorkspaceEmpty) {
+                service.lastEmptyWorkspaceKey = "";
+                service.updateEmptyWorkspaceAction(true);
+            }
+        }
+    }
 
     readonly property int unreadNotificationCount: notificationService ? notificationService.unread.length : 0
     readonly property bool doNotDisturb: notificationService ? notificationService.doNotDisturb : false
@@ -555,9 +567,19 @@ QtObject {
     function updateEmptyWorkspaceAction(isEmpty) {
         if (!activeWorkspaceId) return;
         if (!isEmpty) {
+            var wasEmpty = activeWorkspaceEmpty;
+            activeWorkspaceEmpty = false;
             lastEmptyWorkspaceKey = "";
+            if (wasEmpty && pendingEmptyWorkspaceClose.length > 0) {
+                var pendingClose = pendingEmptyWorkspaceClose;
+                pendingEmptyWorkspaceClose = "";
+                if (pendingClose === "switcher") closeSwitcher(true, true);
+                else if (pendingClose === "clock") requestClockClose(true);
+                else if (pendingClose === "calendar") closeCalendar(true);
+            }
             return;
         }
+        activeWorkspaceEmpty = true;
 
         var key = activeCompositor + ":" + activeWorkspaceId;
         if (lastEmptyWorkspaceKey === key) return;
@@ -571,6 +593,33 @@ QtObject {
             openClock();
         else if (emptyWorkspaceAction === "switcher")
             openSwitcher("bottom-center");
+        else if (emptyWorkspaceAction === "calendar")
+            openCalendar();
+    }
+
+    function emptyWorkspaceComponentIsPinned(component) {
+        return activeWorkspaceEmpty && emptyWorkspaceAction === component;
+    }
+
+    function selectEmptyWorkspaceAction(action) {
+        var previous = emptyWorkspaceAction;
+        emptyWorkspaceAction = String(action || "none");
+        pendingEmptyWorkspaceClose = "";
+        if (activeWorkspaceEmpty && previous !== emptyWorkspaceAction) {
+            if (previous === "switcher") closeSwitcher(true, true);
+            else if (previous === "clock") requestClockClose(true);
+            else if (previous === "calendar") closeCalendar(true);
+            lastEmptyWorkspaceKey = "";
+            if (!idleConfigOpen) updateEmptyWorkspaceAction(true);
+            emptyWorkspaceSelectionTimer.restart();
+        }
+    }
+
+    function refreshEmptyWorkspaceActionSelection() {
+        if (!activeWorkspaceEmpty) return;
+        lastEmptyWorkspaceKey = "";
+        updateEmptyWorkspaceAction(true);
+        emptyWorkspaceSelectionTimer.restart();
     }
 
     // Keep the app list fresh while open, but poll less often while closed so
@@ -873,7 +922,11 @@ QtObject {
         closeCompactClock();
     }
 
-    function closeSwitcher(force) {
+    function closeSwitcher(force, allowPinnedClose) {
+        if (allowPinnedClose !== true && emptyWorkspaceComponentIsPinned("switcher")) {
+            pendingEmptyWorkspaceClose = "switcher";
+            return false;
+        }
         if (open && appSwitcherHovered && force !== true) {
             appSwitcherClosePending = true;
             return false;
@@ -1430,9 +1483,7 @@ QtObject {
         appMenuTimer.stop();
         appMenuPending = false;
         appMenuOpen = false;
-        calendarPending = false;
-        calendarTimer.stop();
-        calendarOpen = false;
+        closeCalendar();
         idleConfigOpen = false;
         wallpaperToggleTimer.stop();
         if (wallpaperService) wallpaperService.closeSelector();
@@ -1440,6 +1491,10 @@ QtObject {
     }
 
     function closeClockOnActivity() {
+        if (emptyWorkspaceComponentIsPinned("clock")) {
+            pendingEmptyWorkspaceClose = "clock";
+            return "kept-open";
+        }
         closeCompactClock();
 
         // The idle command that requests the full card can itself produce an
@@ -1477,9 +1532,7 @@ QtObject {
         appMenuTimer.stop();
         appMenuPending = false;
         appMenuOpen = false;
-        calendarTimer.stop();
-        calendarPending = false;
-        calendarOpen = false;
+        closeCalendar();
         clockOpenTimer.stop();
         if (clockOpen) requestClockClose();
         idleConfigOpen = false;
@@ -1522,7 +1575,11 @@ QtObject {
         compactClockCloseToCenter = false;
     }
 
-    function requestClockClose() {
+    function requestClockClose(force) {
+        if (force !== true && emptyWorkspaceComponentIsPinned("clock")) {
+            pendingEmptyWorkspaceClose = "clock";
+            return false;
+        }
         if (!clockOpen) return;
         if (clockShatterAnimationEnabled) {
             clockCloseRequested = true;
@@ -1570,12 +1627,21 @@ QtObject {
 
     function toggleCalendar() {
         if (calendarOpen || calendarPending) {
-            calendarTimer.stop();
-            calendarPending = false;
-            calendarOpen = false;
+            closeCalendar();
         } else {
             openCalendar();
         }
+    }
+
+    function closeCalendar(force) {
+        if (force !== true && emptyWorkspaceComponentIsPinned("calendar")) {
+            pendingEmptyWorkspaceClose = "calendar";
+            return false;
+        }
+        calendarTimer.stop();
+        calendarPending = false;
+        calendarOpen = false;
+        return true;
     }
 
     property var wallpaperToggleTimer: Timer {
@@ -1641,9 +1707,7 @@ QtObject {
         appMenuPending = false;
         appMenuOpen = false;
         gDictCalcOpen = false;
-        calendarTimer.stop();
-        calendarPending = false;
-        calendarOpen = false;
+        closeCalendar();
         clockOpenTimer.stop();
         if (clockOpen) requestClockClose();
         idleConfigOpen = false;
@@ -1660,9 +1724,7 @@ QtObject {
         gDictCalcOpen = false;
         qSysMonOpen = false;
         clipboardOpen = false;
-        calendarTimer.stop();
-        calendarPending = false;
-        calendarOpen = false;
+        closeCalendar();
         clockOpenTimer.stop();
         if (clockOpen) requestClockClose();
         idleConfigOpen = false;
@@ -1691,9 +1753,7 @@ QtObject {
         appMenuOpen = false;
         gDictCalcOpen = false;
         qSysMonOpen = false;
-        calendarTimer.stop();
-        calendarPending = false;
-        calendarOpen = false;
+        closeCalendar();
         clockOpenTimer.stop();
         if (clockOpen) requestClockClose();
         idleConfigOpen = false;

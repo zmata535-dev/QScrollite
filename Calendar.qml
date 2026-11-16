@@ -22,14 +22,18 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-calendar"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: root.otherComponentOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
 
     readonly property bool pairedWithNotifications: service.notificationService
         ? service.notificationService.notificationCenterOpen : false
+    readonly property bool otherComponentOpen: service.open || service.appMenuOpen || service.appMenuPending
+        || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen || service.clipboardOpen
+        || service.bluetoothOpen || service.idleConfigOpen || service.clockOpen || service.compactClockOpen
+        || (service.wallpaperService && service.wallpaperService.selectorOpen)
     readonly property real pairedCalendarWidth: Math.min(388, (root.width - 48) * 0.38)
     readonly property real pairedNotificationWidth: Math.min(560, (root.width - 48) * 0.56)
     property var pairedInputRegion: Region { item: card }
-    mask: pairedWithNotifications ? pairedInputRegion : null
+    mask: pairedInputRegion
 
     property var monthDate: {
         var now = new Date()
@@ -76,7 +80,7 @@ PanelWindow {
 
     function closeCalendar() {
         var closePairedCenter = pairedWithNotifications
-        service.calendarOpen = false
+        if (!service.closeCalendar()) return
         if (closePairedCenter && service.notificationService)
             service.notificationService.closeCenter()
     }
@@ -94,12 +98,7 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: root.pairedWithNotifications ? "transparent" : "#35080c16"
-
-            MouseArea {
-                anchors.fill: parent
-                    onClicked: root.closeCalendar()
-            }
+            color: root.pairedWithNotifications || root.otherComponentOpen ? "transparent" : "#35080c16"
         }
 
         GlowBorder { targetItem: card; cornerRadius: card.radius }
