@@ -143,6 +143,15 @@ ShellRoot {
     }
 
     LazyLoader {
+        // Wait for qnote.json to load before QNote snapshots the notes array.
+        active: switcherService.qNoteOpen && switcherService.qNoteStorageReady
+
+        QNote {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
         active: switcherService.clipboardOpen
 
         ClipboardManager {
@@ -225,6 +234,13 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         HotCornerTopLeft {
+            service: hotCornerService
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        HotEdgeRight {
             service: hotCornerService
         }
     }
@@ -393,6 +409,26 @@ ShellRoot {
 
         function close(): void {
             switcherService.qSysMonOpen = false;
+        }
+    }
+
+    IpcHandler {
+        target: "qnote"
+
+        function open(): void {
+            switcherService.openQNote();
+        }
+
+        function toggle(): string {
+            if (switcherService.qNoteOpen)
+                switcherService.closeQNote();
+            else
+                switcherService.openQNote();
+            return switcherService.qNoteOpen ? "open" : "closed";
+        }
+
+        function close(): void {
+            switcherService.closeQNote();
         }
     }
 

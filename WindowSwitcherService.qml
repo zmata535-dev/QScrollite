@@ -19,21 +19,30 @@ QtObject {
     property bool volumeOsdVisible: false
     property int brightnessPercent: 0
     property bool brightnessOsdVisible: false
+    property bool networkConnected: false
     property bool bluetoothOpen: false
     property bool bluetoothScanning: false
     property bool bluetoothPowered: false
+    property bool bluetoothConnected: false
     property bool bluetoothDaemonReady: false
     property bool bluetoothScanOnOpen: false
     property bool bluetoothPowerAfterServiceStart: false
     property var bluetoothDevices: []
     property string bluetoothMessage: ""
     property string bluetoothCommandOutput: ""
+    property string bluetoothRepairAddress: ""
     property bool appMenuOpen: false
     property bool appMenuPending: false
     property string appMenuInitialText: ""
     property bool gDictCalcOpen: false
     property string gDictCalcInitialQuery: ""
     property bool qSysMonOpen: false
+    property bool qNoteOpen: false
+    property alias qNoteNotes: qNoteStore.notes
+    property alias qNoteCurrentIndex: qNoteStore.currentIndex
+    property alias qNoteLegacyText: qNoteStore.noteText
+    property alias qNoteInitialized: qNoteStore.initialized
+    property bool qNoteStorageReady: false
     property bool clipboardOpen: false
     property var clipboardHistory: []
     property bool calendarOpen: false
@@ -180,6 +189,37 @@ QtObject {
             id: pinnedAppsStore
             property list<string> pinnedApps: []
         }
+    }
+
+    property var qNoteFile: FileView {
+        id: qNoteFile
+        path: (Quickshell.env("HOME") || "") + "/.config/quickshell/qnote.json"
+        // Notes are small; finish writes before returning so a Quickshell
+        // reload cannot cancel the latest note edit.
+        blockWrites: true
+        onLoaded: service.qNoteStorageReady = true
+        onLoadFailed: function(error) {
+            console.warn("[QNote] Load failed:", error)
+            service.qNoteStorageReady = true
+        }
+        onAdapterUpdated: {
+            if (service.qNoteStorageReady) writeAdapter()
+        }
+        onSaveFailed: function(error) {
+            console.warn("[QNote] Save failed:", error)
+        }
+
+        JsonAdapter {
+            id: qNoteStore
+            property var notes: []
+            property int currentIndex: 0
+            property string noteText: ""
+            property bool initialized: false
+        }
+    }
+
+    function flushQNoteSave() {
+        if (qNoteStorageReady) qNoteFile.writeAdapter()
     }
 
     property var idleApplyProcess: Process {
@@ -613,16 +653,69 @@ QtObject {
         }
     }
 
+    property var networkReadProcess: Process {
+        id: networkReadProcess
+        command: ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"]
+        running: false
+        stdout: StdioCollector {
+            onTextChanged: {
+                var lines = String(text || "").trim().split("\n")
+                var connected = false
+                for (var i = 0; i < lines.length; i++) {
+                    var fields = lines[i].split(":")
+                    if (fields.length < 3) continue
+                    var type = fields[1].toLowerCase()
+                    var state = fields.slice(2).join(":").toLowerCase()
+                    if ((type === "wifi" || type === "ethernet") && state.indexOf("connected") === 0) {
+                        connected = true
+                        break
+                    }
+                }
+                service.networkConnected = connected
+            }
+        }
+    }
+
+    property var networkRefreshTimer: Timer {
+        interval: 5000
+        repeat: true
+        running: service.open
+        onTriggered: service.refreshNetwork()
+    }
+
     property var bluetoothRefreshProcess: Process {
         id: bluetoothRefreshProcess
-        command: ["bash", "-c", "printf 'show\\ndevices\\nquit\\n' | timeout 2s bluetoothctl 2>&1"]
+        command: ["bash", "-c", "(printf 'show\\ndevices\\nquit\\n' | timeout 2s bluetoothctl 2>&1); printf '\\n__QS_PAIRED_DEVICES__\\n'; (printf 'devices Paired\\nquit\\n' | timeout 2s bluetoothctl 2>&1); printf '\\n__QS_CONNECTED_DEVICES__\\n'; (printf 'devices Connected\\nquit\\n' | timeout 2s bluetoothctl 2>&1)"]
         running: false
         stdout: StdioCollector {
             onTextChanged: {
                 var output = String(text || "")
                 service.bluetoothDaemonReady = /Powered:/i.test(output)
                 service.bluetoothPowered = /Powered:\s*yes/i.test(output)
-                var lines = output.split("\n")
+                var pairedMarker = output.indexOf("__QS_PAIRED_DEVICES__")
+                var connectedMarker = output.indexOf("__QS_CONNECTED_DEVICES__")
+                var pairedLines = pairedMarker >= 0
+                    ? output.substring(pairedMarker + "__QS_PAIRED_DEVICES__".length,
+                        connectedMarker >= 0 ? connectedMarker : output.length).split("\n") : []
+                var pairedAddresses = {}
+                for (var p = 0; p < pairedLines.length; p++) {
+                    var pairedOffset = pairedLines[p].indexOf("Device ")
+                    if (pairedOffset < 0) continue
+                    var pairedFields = pairedLines[p].substring(pairedOffset + 7).trim()
+                    var pairedAddress = pairedFields.substring(0, 17).toUpperCase()
+                    if (/^[0-9A-F:]{17}$/i.test(pairedAddress)) pairedAddresses[pairedAddress] = true
+                }
+                var connectedLines = connectedMarker >= 0
+                    ? output.substring(connectedMarker + "__QS_CONNECTED_DEVICES__".length).split("\n") : []
+                var connectedAddresses = {}
+                for (var c = 0; c < connectedLines.length; c++) {
+                    var connectedOffset = connectedLines[c].indexOf("Device ")
+                    if (connectedOffset < 0) continue
+                    var connectedFields = connectedLines[c].substring(connectedOffset + 7).trim()
+                    var connectedAddress = connectedFields.substring(0, 17).toUpperCase()
+                    if (/^[0-9A-F:]{17}$/i.test(connectedAddress)) connectedAddresses[connectedAddress] = true
+                }
+                var lines = (pairedMarker >= 0 ? output.substring(0, pairedMarker) : output).split("\n")
                 var devices = []
                 var seen = {}
                 for (var i = 0; i < lines.length; i++) {
@@ -634,9 +727,15 @@ QtObject {
                     if (!/^[0-9A-F:]{17}$/i.test(address) || !name) continue
                     if (seen[address]) continue
                     seen[address] = true
-                    devices.push({ address: address, name: name })
+                    devices.push({
+                        address: address,
+                        name: name,
+                        paired: pairedAddresses[address] === true,
+                        connected: connectedAddresses[address] === true
+                    })
                 }
                 service.bluetoothDevices = devices
+                service.bluetoothConnected = devices.some(function(device) { return device.connected })
                 if (output.indexOf("Waiting to connect to bluetoothd") !== -1)
                     service.bluetoothMessage = "Bluetooth service is inactive"
                 else if (/No default controller/i.test(output))
@@ -695,13 +794,24 @@ QtObject {
             }
         }
         onExited: function(exitCode, exitStatus) {
+            var repairAddress = service.bluetoothRepairAddress
+            service.bluetoothRepairAddress = ""
+            if (repairAddress) {
+                if (exitCode === 0) {
+                    Qt.callLater(function() {
+                        service.runBluetoothCommand(["pair", repairAddress], "Pairing again with " + repairAddress + "…")
+                    })
+                    return
+                }
+                service.bluetoothMessage = "Could not remove the existing pairing"
+            }
             if (exitCode === 124)
                 service.bluetoothMessage = "Bluetooth command timed out"
             else if (exitCode !== 0 && !service.bluetoothCommandOutput)
                 service.bluetoothMessage = "Bluetooth command failed (" + exitCode + ")"
             else if (exitCode === 0 && !service.bluetoothCommandOutput)
                 service.bluetoothMessage = "Command completed"
-            service.refreshBluetoothTimer.restart()
+            service.bluetoothRefreshTimer.restart()
         }
     }
 
@@ -749,7 +859,12 @@ QtObject {
         workspaces = [];
         activeWindowId = "";
         refresh();
+        refreshNetwork();
         open = true;
+    }
+
+    function refreshNetwork() {
+        if (!networkReadProcess.running) networkReadProcess.running = true
     }
 
     function cancelCompactClockForAppPanels() {
@@ -871,6 +986,28 @@ QtObject {
         }
     }
 
+    function moveWindowByColumns(win, steps) {
+        if (!win || win.id === undefined || win.id === null) return;
+        var count = Math.min(100, Math.abs(Math.trunc(Number(steps) || 0)));
+        if (count === 0) return;
+        var direction = Number(steps) > 0 ? "right" : "left";
+        var id = String(win.id);
+
+        if (activeCompositor === "niri") {
+            if (!/^\d+$/.test(id)) return;
+            var niriScript = "niri msg action focus-window --id \"$1\" && for ((i=0; i<" + count + "; i++)); do niri msg action move-column-" + direction + " || exit; done";
+            Quickshell.execDetached(["bash", "-c", niriScript, "qscrollite-reorder", id]);
+            return;
+        }
+
+        if (!/^0x[0-9a-f]+$/i.test(id)) return;
+        var layoutDirection = direction === "right" ? "r" : "l";
+        var focusCommand = "hyprctl dispatch 'hl.dsp.focus({ window = \"address:" + id + "\" })'";
+        var swapCommand = "hyprctl dispatch 'hl.dsp.layout(\"swapcol " + layoutDirection + "\")'";
+        var hyprScript = focusCommand + " && for ((i=0; i<" + count + "; i++)); do " + swapCommand + " || exit; done";
+        Quickshell.execDetached(["bash", "-c", hyprScript]);
+    }
+
     function toggleWindowFullscreen(win) {
         if (!win || win.id === undefined || win.id === null) return;
         var id = String(win.id);
@@ -922,6 +1059,17 @@ QtObject {
         if (entryId) Quickshell.execDetached(["gtk-launch", entryId]);
     }
 
+    function unpinApp(id) {
+        var targetId = normalizedDesktopEntryId(id).toLowerCase();
+        if (!targetId) return;
+        var updated = pinnedApps.slice(0);
+        for (var i = updated.length - 1; i >= 0; i--) {
+            if (normalizedDesktopEntryId(updated[i]).toLowerCase() === targetId)
+                updated.splice(i, 1);
+        }
+        pinnedApps = updated;
+    }
+
     function isWindowAppPinned(win) {
         var entry = appEntryForWindow(win);
         if (!entry || !entry.id) return false;
@@ -939,6 +1087,34 @@ QtObject {
         var index = updated.indexOf(appId);
         if (index >= 0) updated.splice(index, 1);
         else updated.push(appId);
+        pinnedApps = updated;
+    }
+
+    function reorderPinnedApps(sourceId, targetId, insertAfter) {
+        var sourceKey = normalizedDesktopEntryId(sourceId).toLowerCase();
+        var targetKey = normalizedDesktopEntryId(targetId).toLowerCase();
+        if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+
+        var updated = pinnedApps.slice(0);
+        var sourceIndex = -1;
+        for (var i = 0; i < updated.length; i++) {
+            if (normalizedDesktopEntryId(updated[i]).toLowerCase() === sourceKey) {
+                sourceIndex = i;
+                break;
+            }
+        }
+        if (sourceIndex < 0) return;
+
+        var sourceEntry = updated.splice(sourceIndex, 1)[0];
+        var targetIndex = -1;
+        for (var j = 0; j < updated.length; j++) {
+            if (normalizedDesktopEntryId(updated[j]).toLowerCase() === targetKey) {
+                targetIndex = j;
+                break;
+            }
+        }
+        if (targetIndex < 0) return;
+        updated.splice(targetIndex + (insertAfter ? 1 : 0), 0, sourceEntry);
         pinnedApps = updated;
     }
 
@@ -1081,6 +1257,7 @@ QtObject {
 
     function setBluetoothPower(enabled) {
         bluetoothPowered = enabled;
+        if (!enabled) bluetoothConnected = false
         if (!bluetoothDaemonReady && enabled) {
             startBluetoothService(true)
             return
@@ -1097,6 +1274,15 @@ QtObject {
 
     function pairBluetooth(address) {
         runBluetoothCommand(["pair", address], "Pairing with " + address + "…");
+    }
+
+    function repairBluetooth(address) {
+        if (bluetoothCommandProcess.running) {
+            bluetoothMessage = "A Bluetooth command is already running"
+            return
+        }
+        bluetoothRepairAddress = address
+        runBluetoothCommand(["remove", address], "Removing old pairing before repair…")
     }
 
     function connectBluetooth(address) {
@@ -1463,6 +1649,29 @@ QtObject {
         idleConfigOpen = false;
         if (wallpaperService) wallpaperService.closeSelector();
         qSysMonOpen = true;
+    }
+
+    function openQNote() {
+        cancelCompactClockForAppPanels();
+        closeSwitcher(true);
+        appMenuTimer.stop();
+        appMenuPending = false;
+        appMenuOpen = false;
+        gDictCalcOpen = false;
+        qSysMonOpen = false;
+        clipboardOpen = false;
+        calendarTimer.stop();
+        calendarPending = false;
+        calendarOpen = false;
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose();
+        idleConfigOpen = false;
+        if (wallpaperService) wallpaperService.closeSelector();
+        qNoteOpen = true;
+    }
+
+    function closeQNote() {
+        qNoteOpen = false;
     }
 
     function rememberClipboardText(text) {

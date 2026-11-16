@@ -19,7 +19,7 @@ PanelWindow {
         top: true
     }
 
-    implicitHeight: 12
+    implicitHeight: 1
 
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-compact-clock-hotcorner"

@@ -25,6 +25,10 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-app-menu"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    mask: Region {
+        item: outsideClickArea
+        Region { item: card }
+    }
 
     property string filterText: ""
     property bool showAllApps: false
@@ -170,18 +174,21 @@ PanelWindow {
         function onValuesChanged() { root.appRevision++ }
     }
 
+    Rectangle {
+        anchors.fill: parent
+        color: "#35080c16"
+    }
+
+    MouseArea {
+        id: outsideClickArea
+        anchors.fill: parent
+        z: -1
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onClicked: root.closeMenu()
+    }
+
     Item {
         anchors.fill: parent
-
-        Rectangle {
-            anchors.fill: parent
-            color: "#35080c16"
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: root.closeMenu()
-            }
-        }
 
         GlowBorder {
             targetItem: card

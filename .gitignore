@@ -2,6 +2,8 @@
 idle-settings.json
 recent-apps.json
 wallpaper-state.json
+qnote.json
+qnote.json.backup*
 
 # Python cache
 __pycache__/

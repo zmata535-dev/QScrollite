@@ -27,7 +27,6 @@ PanelWindow {
     WlrLayershell.keyboardFocus: switcherWindow.service.open
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
-        item: outsideClickArea
         Region { item: container }
         Region { item: appContextMenu }
     }
@@ -117,6 +116,7 @@ PanelWindow {
         function onOpenChanged() {
             if (!switcherWindow.service.open) {
                 switcherLeaveTimer.stop()
+                switcherWindow.contextMenuWindow = null
                 return
             }
 
@@ -128,15 +128,6 @@ PanelWindow {
             if (!containerHoverHandler.hovered)
                 switcherLeaveTimer.restart()
         }
-    }
-
-    // A full-screen input target lets a click outside the bar dismiss it.
-    MouseArea {
-        id: outsideClickArea
-        anchors.fill: parent
-        z: -1
-        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: switcherWindow.service.closeSwitcher(true)
     }
 
     property var inactivePinnedApps: {
@@ -200,6 +191,54 @@ PanelWindow {
     function setFocusedColumnWidth(percent) {
         var win = focusedTiledAppWindow();
         if (win) switcherWindow.service.setWindowColumnWidth(win, percent);
+    }
+
+    function reorderWindowByDrop(sourceWin, targetWin, insertAfter) {
+        if (!sourceWin || !targetWin || sourceWin.floating || targetWin.floating ||
+                String(sourceWin.id) === String(targetWin.id) ||
+                String(sourceWin.workspaceId) !== String(targetWin.workspaceId)) return;
+
+        var workspace = null;
+        var workspaces = switcherWindow.service.workspaces || [];
+        for (var i = 0; i < workspaces.length; i++) {
+            if (String(workspaces[i].id) === String(sourceWin.workspaceId)) {
+                workspace = workspaces[i];
+                break;
+            }
+        }
+        if (!workspace) return;
+
+        var windows = workspace.windows || [];
+        var columns = [];
+        var sourceColumn = -1;
+        var targetColumn = -1;
+        for (var j = 0; j < windows.length; j++) {
+            var x = Number(windows[j].x || 0);
+            var columnIndex = columns.length - 1;
+            if (columnIndex < 0 || Math.abs(columns[columnIndex].x - x) > 0.5) {
+                columns.push({ x: x, ids: [] });
+                columnIndex++;
+            }
+            columns[columnIndex].ids.push(String(windows[j].id));
+            if (String(windows[j].id) === String(sourceWin.id)) sourceColumn = columnIndex;
+            if (String(windows[j].id) === String(targetWin.id)) targetColumn = columnIndex;
+        }
+        if (sourceColumn < 0 || targetColumn < 0 || sourceColumn === targetColumn) return;
+
+        var destination = targetColumn;
+        if (sourceColumn < targetColumn) {
+            if (!insertAfter) destination--;
+        } else if (sourceColumn > targetColumn) {
+            if (insertAfter) destination++;
+        } else {
+            return;
+        }
+        switcherWindow.service.moveWindowByColumns(sourceWin, destination - sourceColumn);
+    }
+
+    function reorderPinnedByDrop(sourceId, targetId, insertAfter) {
+        if (!sourceId || !targetId || String(sourceId) === String(targetId)) return;
+        switcherWindow.service.reorderPinnedApps(sourceId, targetId, insertAfter);
     }
 
     function toggleFocusedFullscreen() {
@@ -311,9 +350,9 @@ PanelWindow {
     Rectangle {
         id: container
         x: switcherWindow.service.switcherPlacement === "bottom-center"
-            ? Math.max(16, (switcherWindow.width - width) / 2) : 16
+            ? (switcherWindow.width - width) / 2 : 0
         y: switcherWindow.service.switcherPlacement === "bottom-center"
-            ? Math.max(16, switcherWindow.height - height - 28) : 16
+            ? switcherWindow.height - height : 0
 
         width: Math.min(switcherWindow.width - 32, Math.max(500, mainCol.implicitWidth + 16)) * 0.9 + 17
         height: mainCol.implicitHeight + 14
@@ -440,11 +479,6 @@ PanelWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: switcherWindow.service.openGDictCalc("")
-                        ShellToolTip {
-                            parent: gDictCalcHeaderMouse
-                            visible: gDictCalcHeaderMouse.containsMouse
-                            text: "GDictCalc"
-                        }
                     }
                 }
 
@@ -461,8 +495,8 @@ PanelWindow {
 
                         delegate: Rectangle {
                             required property var modelData
-                            implicitWidth: 32
-                            implicitHeight: 20
+                            implicitWidth: 22
+                            implicitHeight: 22
                             radius: 6
                             color: widthButtonMouse.containsMouse ? "#273650" : "#161d2a"
                             border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -486,11 +520,6 @@ PanelWindow {
                                 onClicked: switcherWindow.setFocusedColumnWidth(modelData.value)
                             }
 
-                            ShellToolTip {
-                                parent: widthButtonMouse
-                                visible: widthButtonMouse.containsMouse
-                                text: modelData.name + " column width"
-                            }
                         }
                     }
                 }
@@ -519,15 +548,11 @@ PanelWindow {
                         onClicked: switcherWindow.toggleFocusedFullscreen()
                     }
 
-                    ShellToolTip {
-                        parent: fullscreenFocusedMouse
-                        visible: fullscreenFocusedMouse.containsMouse
-                        text: "Toggle fullscreen"
-                    }
                 }
 
                 // Audio mixer
                 Rectangle {
+                    Layout.leftMargin: 9
                     implicitWidth: 22
                     implicitHeight: 22
                     radius: 6
@@ -563,11 +588,34 @@ PanelWindow {
                             switcherWindow.service.adjustVolume(event.angleDelta.y > 0 ? 1 : -1)
                             event.accepted = true
                         }
-                        ShellToolTip {
-                            parent: volumeMouse
-                            visible: volumeMouse.containsMouse
-                            text: "Scroll: adjust volume · Left-click: mixer · Right-click: "
-                                + (switcherWindow.service.volumeMuted ? "unmute" : "mute")
+                    }
+                }
+
+                // Backlight control follows volume.
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: brightnessMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: brightnessMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰛨"
+                        color: brightnessMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+                    MouseArea {
+                        id: brightnessMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.showBrightnessOsd()
+                        onWheel: function(event) {
+                            switcherWindow.service.adjustBrightness(event.angleDelta.y > 0 ? 1 : -1)
+                            event.accepted = true
                         }
                     }
                 }
@@ -578,15 +626,15 @@ PanelWindow {
                     implicitHeight: 22
                     radius: 6
                     color: bluetoothMouse.containsMouse ? "#273650"
-                        : (switcherWindow.service.bluetoothPowered ? "#1b3034" : "#161d2a")
+                        : (switcherWindow.service.bluetoothConnected ? "#1c2a42" : "#161d2a")
                     border.color: bluetoothMouse.containsMouse ? "#abc7ff"
-                        : (switcherWindow.service.bluetoothPowered ? "#5b9b95" : "#2b364a")
+                        : (switcherWindow.service.bluetoothConnected ? "#5476a4" : "#2b364a")
                     border.width: 1
                     Text {
                         anchors.centerIn: parent
                         text: switcherWindow.service.bluetoothPowered ? "󰂯" : "󰂲"
                         color: bluetoothMouse.containsMouse ? "#abc7ff"
-                            : (switcherWindow.service.bluetoothPowered ? "#8fd8cf" : "#8092ab")
+                            : (switcherWindow.service.bluetoothConnected ? "#abc7ff" : "#8092ab")
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 12
                     }
@@ -602,12 +650,32 @@ PanelWindow {
                             else
                                 switcherWindow.service.manageBluetooth()
                         }
-                        ShellToolTip {
-                            parent: bluetoothMouse
-                            visible: bluetoothMouse.containsMouse
-                            text: "Left-click: manage devices · Right-click: power "
-                                + (switcherWindow.service.bluetoothPowered ? "off" : "on")
-                        }
+                    }
+                }
+
+                // Network status indicator
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: networkMouse.containsMouse ? "#273650"
+                        : (switcherWindow.service.networkConnected ? "#1c2a42" : "#161d2a")
+                    border.color: networkMouse.containsMouse ? "#abc7ff"
+                        : (switcherWindow.service.networkConnected ? "#5476a4" : "#2b364a")
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.networkConnected ? "󰖩" : "󰖪"
+                        color: networkMouse.containsMouse ? "#abc7ff"
+                            : (switcherWindow.service.networkConnected ? "#abc7ff" : "#8092ab")
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+                    MouseArea {
+                        id: networkMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
                     }
                 }
 
@@ -640,14 +708,6 @@ PanelWindow {
                             else
                                 switcherWindow.service.notificationService.toggleDnd()
                         }
-                    }
-
-                    ShellToolTip {
-                        parent: dndMouse
-                        visible: dndMouse.containsMouse
-                        text: "Left-click for notifications · "
-                            + (switcherWindow.service.doNotDisturb ? "Do Not Disturb: on (right-click to disable)" : "Do Not Disturb: off (right-click to enable)")
-                            + " · " + switcherWindow.service.unreadNotificationCount + " unread"
                     }
 
                     Rectangle {
@@ -684,44 +744,6 @@ PanelWindow {
                             onClicked: switcherWindow.service.notificationService.openCenter()
                         }
 
-                        ShellToolTip {
-                            parent: unreadCountMouse
-                            visible: unreadCountMouse.containsMouse
-                            text: "Open notification center"
-                        }
-                    }
-                }
-
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: brightnessMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: brightnessMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰛨"
-                        color: brightnessMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 15
-                    }
-                    MouseArea {
-                        id: brightnessMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.showBrightnessOsd()
-                        onWheel: function(event) {
-                            switcherWindow.service.adjustBrightness(event.angleDelta.y > 0 ? 1 : -1)
-                            event.accepted = true
-                        }
-                        ShellToolTip {
-                            parent: brightnessMouse
-                            visible: brightnessMouse.containsMouse
-                            text: "Click: brightness slider · Scroll: adjust brightness"
-                        }
                     }
                 }
 
@@ -818,7 +840,8 @@ PanelWindow {
                 Flickable {
                 id: appsFlickable
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.leftMargin: 1
+                anchors.rightMargin: 1
                 contentWidth: appsRow.childrenRect.width
                 contentHeight: 46
                 clip: true
@@ -852,13 +875,22 @@ PanelWindow {
                         model: switcherWindow.inactivePinnedApps
 
                         delegate: Rectangle {
+                            id: pinnedAppCard
                             required property var modelData
+                            readonly property string pinnedAppId: String(modelData.id || "")
                             width: 32
                             height: 32
                             anchors.verticalCenter: parent.verticalCenter
                             radius: 9
-                            color: pinnedAppMouse.containsMouse ? "#202a3a" : "#070b12"
+                            color: pinnedAppHover.hovered ? "#202a3a" : "#070b12"
                             border.width: 0
+                            opacity: pinnedDragHandler.active ? 0.55 : 1
+
+                            Drag.active: pinnedDragHandler.active
+                            Drag.source: pinnedAppCard
+                            Drag.keys: ["qscrollite-pinned-app"]
+                            Drag.hotSpot.x: width / 2
+                            Drag.hotSpot.y: height / 2
 
                             Image {
                                 id: pinnedAppIcon
@@ -878,27 +910,82 @@ PanelWindow {
                                 font.pixelSize: 12
                             }
 
-                            MouseArea {
-                                id: pinnedAppMouse
-                                anchors {
-                                    left: parent.left
-                                    right: parent.right
-                                    top: parent.top
-                                    bottom: parent.bottom
-                                    bottomMargin: -8
-                                }
-                                hoverEnabled: true
+                            HoverHandler {
+                                id: pinnedAppHover
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
+                            }
+
+                            TapHandler {
+                                acceptedButtons: Qt.LeftButton
+                                onTapped: function(eventPoint) {
+                                    if (eventPoint.position.x >= pinnedAppCard.width - 5 &&
+                                            eventPoint.position.y >= 0 && eventPoint.position.y <= 8)
+                                        return
                                     switcherWindow.pendingIconFocusWindowId = ""
                                     switcherWindow.pendingIconLaunchAppId = String(modelData.id || "")
                                     switcherWindow.service.launchPinnedApp(modelData.id)
                                 }
                             }
 
+                            Rectangle {
+                                id: unpinBadge
+                                width: 13
+                                height: 13
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.topMargin: -4
+                                anchors.rightMargin: -5
+                                z: 4
+                                radius: 5
+                                visible: pinnedAppHover.hovered || unpinMouse.containsMouse
+                                color: "#f0a04b"
+                                border.color: "#111722"
+                                border.width: 1
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "−"
+                                    color: "#17202c"
+                                    font.family: "JetBrainsMono Nerd Font Mono"
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                }
+
+                                MouseArea {
+                                    id: unpinMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: switcherWindow.service.unpinApp(modelData.id)
+                                }
+                            }
+
+                            DragHandler {
+                                id: pinnedDragHandler
+                                target: null
+                                acceptedButtons: Qt.LeftButton
+                                enabled: !unpinMouse.containsMouse
+                            }
+
+                            DropArea {
+                                anchors.fill: parent
+                                z: 2
+                                keys: ["qscrollite-pinned-app"]
+                                onDropped: function(drop) {
+                                    var source = drop.source
+                                    if (!source || !source.pinnedAppId) return
+                                    switcherWindow.reorderPinnedByDrop(
+                                        source.pinnedAppId,
+                                        pinnedAppCard.pinnedAppId,
+                                        drop.x >= width / 2
+                                    )
+                                    drop.acceptProposedAction()
+                                }
+                            }
+
                             ShellToolTip {
-                                parent: pinnedAppMouse
-                                visible: pinnedAppMouse.containsMouse
+                                parent: pinnedAppCard
+                                visible: pinnedAppHover.hovered
                                 text: modelData.name || modelData.id
                             }
                         }
@@ -957,11 +1044,19 @@ PanelWindow {
                                         // App Icon Button
                                         Rectangle {
                                             id: appCard
+                                            readonly property var appWindowData: modelData
                                             width: modelData.focused ? 36 : 32
                                             height: modelData.focused ? 36 : 32
                                             radius: 9
+                                            opacity: appDragHandler.active ? 0.55 : 1
 
-                                            color: modelData.focused ? "#2c4568" : (appMouse.containsMouse ? "#202a3a" : "#070b12")
+                                            Drag.active: appDragHandler.active
+                                            Drag.source: appCard
+                                            Drag.keys: ["qscrollite-app-window"]
+                                            Drag.hotSpot.x: width / 2
+                                            Drag.hotSpot.y: height / 2
+
+                                            color: modelData.focused ? "#2c4568" : (appHover.hovered ? "#202a3a" : "#070b12")
                                             border.color: container.border.color
                                             border.width: modelData.focused ? 1 : 0
 
@@ -994,46 +1089,31 @@ PanelWindow {
                                                     font.pixelSize: 12}
                                             }
 
-                                            MouseArea {
-                                                id: appMouse
-                                                anchors {
-                                                    left: parent.left
-                                                    right: parent.right
-                                                    top: parent.top
-                                                    bottom: parent.bottom
-                                                    topMargin: -4
-                                                    bottomMargin: -10
-                                                }
-                                                hoverEnabled: true
+                                            HoverHandler {
+                                                id: appHover
                                                 cursorShape: Qt.PointingHandCursor
-                                                acceptedButtons: Qt.LeftButton
-                                                ShellToolTip {
-                                                    id: appInfoTooltip
-                                                    parent: appCard
-                                                    visible: appMouse.containsMouse
-                                                    text: (modelData.appId || "Application") + ": " + (modelData.title || "Untitled")
-                                                }
-
-                                                onEntered: {
+                                                onHoveredChanged: {
+                                                    if (hovered) {
                                                     switcherWindow.service.hoveredWindow = modelData;
-                                                }
-
-                                                onExited: {
-                                                    if (switcherWindow.service.hoveredWindow === modelData) {
+                                                    } else if (switcherWindow.service.hoveredWindow === modelData) {
                                                         switcherWindow.service.hoveredWindow = null;
                                                     }
                                                 }
+                                            }
 
-                                                onClicked: function(mouse) {
-                                                    var point = appMouse.mapToItem(appCard, mouse.x, mouse.y)
-                                                    if (point.x >= appCard.width - 18 && point.y >= -10 && point.y <= 8) {
-                                                        switcherWindow.service.closeWindow(modelData)
-                                                        switcherWindow.service.closeSwitcher(true)
-                                                    } else {
-                                                        switcherWindow.pendingIconFocusWindowId = String(modelData.id || "")
-                                                        switcherWindow.pendingIconLaunchAppId = ""
-                                                        switcherWindow.service.focusWindow(modelData, true)
-                                                    }
+                                            ShellToolTip {
+                                                id: appInfoTooltip
+                                                parent: appCard
+                                                visible: appHover.hovered
+                                                text: (modelData.appId || "Application") + ": " + (modelData.title || "Untitled")
+                                            }
+
+                                            TapHandler {
+                                                acceptedButtons: Qt.LeftButton
+                                                onTapped: {
+                                                    switcherWindow.pendingIconFocusWindowId = String(modelData.id || "")
+                                                    switcherWindow.pendingIconLaunchAppId = ""
+                                                    switcherWindow.service.focusWindow(modelData, true)
                                                 }
                                             }
 
@@ -1049,9 +1129,31 @@ PanelWindow {
                                                 }
                                             }
 
+                                            DragHandler {
+                                                id: appDragHandler
+                                                target: null
+                                                acceptedButtons: Qt.LeftButton
+                                            }
+
+                                            DropArea {
+                                                anchors.fill: parent
+                                                z: 2
+                                                keys: ["qscrollite-app-window"]
+                                                onDropped: function(drop) {
+                                                    var source = drop.source
+                                                    if (!source || !source.appWindowData) return
+                                                    switcherWindow.reorderWindowByDrop(
+                                                        source.appWindowData,
+                                                        modelData,
+                                                        drop.x >= width / 2
+                                                    )
+                                                    drop.acceptProposedAction()
+                                                }
+                                            }
+
                                             Rectangle {
                                                 id: closeAppButton
-                                                z: 2
+                                                z: 3
                                                 width: 16
                                                 height: 16
                                                 anchors.top: parent.top
@@ -1059,8 +1161,8 @@ PanelWindow {
                                                 anchors.topMargin: -4
                                                 anchors.rightMargin: -5
                                                 radius: 5
-                                                visible: appMouse.containsMouse
-                                                color: appMouse.containsMouse ? "#a83245" : "#71303d"
+                                                visible: appHover.hovered || closeAppMouse.containsMouse
+                                                color: appHover.hovered ? "#a83245" : "#71303d"
                                                 border.color: "#ff9aa8"
                                                 border.width: 1
 
@@ -1068,6 +1170,16 @@ PanelWindow {
                                                     text: "×"
                                                     color: "#ffffff"
                                                     font.pixelSize: 13}
+
+                                                MouseArea {
+                                                    id: closeAppMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        switcherWindow.service.closeWindow(modelData)
+                                                    }
+                                                }
 
                                             }
 
@@ -1250,6 +1362,36 @@ PanelWindow {
                     implicitWidth: 22
                     implicitHeight: 22
                     radius: 6
+                    color: qNoteMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: qNoteMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰈙"
+                        color: qNoteMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 18
+                    }
+
+                    MouseArea {
+                        id: qNoteMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.openQNote()
+                        ShellToolTip {
+                            parent: qNoteMouse
+                            visible: qNoteMouse.containsMouse
+                            text: "QNote · Sticky note"
+                        }
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
                     color: wallpaperMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: wallpaperMouse.containsMouse ? "#abc7ff" : "#2b364a"
                     border.width: 1
@@ -1305,10 +1447,7 @@ PanelWindow {
         z: 90
         visible: switcherWindow.contextMenuWindow !== null
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-        onClicked: function(mouse) {
-            var point = container.mapFromItem(switcherWindow, mouse.x, mouse.y)
-            if (!container.contains(point))
-                switcherWindow.service.closeSwitcher(true)
+        onClicked: {
             switcherWindow.contextMenuWindow = null
         }
     }
@@ -1364,6 +1503,7 @@ PanelWindow {
                         action: "toggle-pin"
                     },
                     { label: "Launch another instance", action: "launch" },
+                    { label: "Close window", action: "close" },
                     { label: "Close all windows from this app", action: "close-all" }
                 ]
 

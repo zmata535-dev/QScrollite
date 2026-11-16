@@ -12,7 +12,7 @@ PanelWindow {
     visible: service.bottomAppSwitcherEnabled
     color: "transparent"
     implicitWidth: screen.width
-    implicitHeight: 12
+    implicitHeight: 1
 
     anchors {
         left: true

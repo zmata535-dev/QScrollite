@@ -335,32 +335,47 @@ PanelWindow {
             background: Item {}
             onHoveredChanged: root.updateClockHover(hovered)
             onClicked: root.service.openCalendarFromCompactClock()
-            contentItem: Row {
-                anchors.centerIn: parent
-                spacing: 0
+            contentItem: Item {
+                clip: true
 
-                Text {
-                    text: Qt.formatDateTime(root.now, "HH")
-                    color: "#ffffff"
-                    font.family: "JetBrainsMono Nerd Font Mono"
-                    font.weight: Font.Light
-                    font.pixelSize: root.service.compactClockTextSize
-                }
+                Row {
+                    anchors.centerIn: parent
+                    width: implicitWidth
+                    height: parent.height
+                    spacing: 0
+                    transformOrigin: Item.Center
+                    scale: parent.width > 8 && width > parent.width - 8
+                        ? (parent.width - 8) / width : 1
 
-                Text {
-                    text: ":"
-                    color: root.colonVisible ? "#ffffff" : "#414957"
-                    font.family: "JetBrainsMono Nerd Font Mono"
-                    font.weight: Font.Light
-                    font.pixelSize: root.service.compactClockTextSize
-                }
+                    Text {
+                        height: parent.height
+                        text: Qt.formatDateTime(root.now, "HH")
+                        color: "#ffffff"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.weight: Font.Light
+                        font.pixelSize: Math.min(root.service.compactClockTextSize, compactCard.height - 4)
+                        verticalAlignment: Text.AlignVCenter
+                    }
 
-                Text {
-                    text: Qt.formatDateTime(root.now, "mm")
-                    color: "#ffffff"
-                    font.family: "JetBrainsMono Nerd Font Mono"
-                    font.weight: Font.Light
-                    font.pixelSize: root.service.compactClockTextSize
+                    Text {
+                        height: parent.height
+                        text: ":"
+                        color: root.colonVisible ? "#ffffff" : "#414957"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.weight: Font.Light
+                        font.pixelSize: Math.min(root.service.compactClockTextSize, compactCard.height - 4)
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    Text {
+                        height: parent.height
+                        text: Qt.formatDateTime(root.now, "mm")
+                        color: "#ffffff"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.weight: Font.Light
+                        font.pixelSize: Math.min(root.service.compactClockTextSize, compactCard.height - 4)
+                        verticalAlignment: Text.AlignVCenter
+                    }
                 }
             }
         }

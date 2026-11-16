@@ -184,9 +184,11 @@ PanelWindow {
 
                                         ShellButton {
                                             font.pixelSize: 9
-                                            text: "Pair"
+                                            text: modelData.paired ? "Repair" : "Pair"
                                             enabled: root.service.bluetoothDaemonReady && root.service.bluetoothPowered
-                                            onClicked: root.service.pairBluetooth(modelData.address)
+                                            onClicked: modelData.paired
+                                                ? root.service.repairBluetooth(modelData.address)
+                                                : root.service.pairBluetooth(modelData.address)
                                         }
                                         ShellButton {
                                             font.pixelSize: 9

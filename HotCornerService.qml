@@ -83,6 +83,11 @@ QtObject {
         switcherService.openSwitcher();
     }
 
+    function showQNote() {
+        if (!enabled || !switcherService || switcherService.qNoteOpen) return;
+        switcherService.openQNote();
+    }
+
     function triggerCorner(corner, screenName) {
         if (!enabled) return false;
 
