@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -23,6 +24,44 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-idle-settings"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    property real settingsCardX: -500
+    property real settingsTargetX: 12
+
+    function positionOppositeFocusedWindow() {
+        settingsTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
+            root.width, card.width, 12)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        settingsCardX = PanelPlacement.entryX(settingsTargetX, root.width, card.width,
+            root.screen.x, 12)
+        settingsSlide.to = settingsTargetX
+        settingsSlide.restart()
+    }
+
+    NumberAnimation {
+        id: settingsSlide
+        target: root
+        property: "settingsCardX"
+        to: root.settingsTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            if (!root.visible) return
+            Qt.callLater(function() {
+                if (!root.visible) return
+                root.positionOppositeFocusedWindow()
+                settingsSlide.stop()
+                settingsSlide.to = root.settingsTargetX
+                settingsSlide.restart()
+            })
+        }
+    }
 
     property bool clockPreviewVisible: false
     property real clockPreviewFractureProgress: 0
@@ -127,7 +166,9 @@ PanelWindow {
             id: clockPreviewCard
             x: root.clockPreviewSlideProgress > 0
                 ? root.clockPreviewSlideStartX + ((root.width - width) / 2 - root.clockPreviewSlideStartX) * root.clockPreviewSlideProgress
-                : card.x + card.width + 24
+                : (root.settingsTargetX + card.width / 2 > root.width / 2
+                    ? Math.max(12, card.x - width - 24)
+                    : Math.min(root.width - width - 12, card.x + card.width + 24))
             y: (root.height - height) / 2 - ((root.height + height) / 2) * root.clockPreviewSlideProgress
             width: Math.min(442, Math.max(204, (root.width - card.width - 64) * 0.85))
             height: 212
@@ -201,9 +242,7 @@ font.pixelSize: 17
                 ? Math.min(420, Math.max(300, (root.width - 64) * 0.48))
                 : Math.min(420, root.width - 32)
             height: Math.min(620, root.height - 32)
-            x: root.clockPreviewVisible
-                ? Math.max(16, (root.width - width - clockPreviewCard.width - 24) / 2)
-                : (root.width - width) / 2
+            x: root.settingsCardX
             y: (root.height - height) / 2
             radius: 14
             color: "#111722"
@@ -631,5 +670,8 @@ font.pixelSize: 17
         }
     }
 
-    Component.onCompleted: Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Component.onCompleted: {
+        openFromOppositeSide()
+        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    }
 }

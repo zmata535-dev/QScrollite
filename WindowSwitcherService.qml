@@ -372,6 +372,14 @@ QtObject {
         }
     }
 
+    property var wallpaperSelectorConnections: Connections {
+        target: service.wallpaperService
+        function onSelectorOpenChanged() {
+            if (service.wallpaperService && service.wallpaperService.selectorOpen)
+                service.cancelCompactClockForAppPanels()
+        }
+    }
+
     function parseHyprland(clientsJson, activeJson, activeWorkspaceJson) {
         if (!clientsJson) return;
         var clients = JSON.parse(clientsJson);
@@ -628,7 +636,8 @@ QtObject {
     property var refreshTimer: Timer {
         interval: service.open || service.emptyWorkspaceAction !== "none" ? 500 : 5000
         repeat: true
-        running: service.activeCompositor !== "hyprland" || !hyprlandEventSocket.connected
+        running: (service.open || service.clockOpen || service.emptyWorkspaceAction !== "none") &&
+            (service.activeCompositor !== "hyprland" || !hyprlandEventSocket.connected)
         onTriggered: {
             service.refresh();
         }
@@ -1517,7 +1526,8 @@ QtObject {
     }
 
     function requestCompactClock() {
-        if (calendarOpen || calendarPending) {
+        var wallpaperOpen = wallpaperService && wallpaperService.selectorOpen
+        if (calendarOpen || calendarPending || idleConfigOpen || wallpaperOpen || wallpaperToggleTimer.running) {
             compactClockOpenTimer.stop();
             compactClockPending = false;
             return;
@@ -1654,6 +1664,9 @@ QtObject {
 
     function toggleWallpaperSelector() {
         closeSwitcher();
+        compactClockOpenTimer.stop();
+        compactClockPending = false;
+        closeCompactClock();
         wallpaperToggleTimer.restart();
     }
 

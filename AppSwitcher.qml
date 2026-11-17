@@ -94,7 +94,7 @@ PanelWindow {
 
     Timer {
         id: switcherLeaveTimer
-        interval: 1560
+        interval: 500
         repeat: false
         onTriggered: {
             if (containerHoverHandler.hovered) {
@@ -378,6 +378,11 @@ PanelWindow {
                     switcherLeaveTimer.restart()
                 }
             }
+        }
+
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: switcherWindow.service.openGDictCalc("")
         }
 
         ColumnLayout {
@@ -1118,8 +1123,12 @@ PanelWindow {
                                             }
 
                                             TapHandler {
-                                                acceptedButtons: Qt.RightButton
+                                                acceptedButtons: Qt.RightButton | Qt.MiddleButton
                                                 onTapped: function(eventPoint, button) {
+                                                    if (button === Qt.RightButton) {
+                                                        switcherWindow.service.openGDictCalc("")
+                                                        return
+                                                    }
                                                     var menuPoint = appCard.mapToItem(
                                                         switcherWindow.contentItem,
                                                         eventPoint.position.x,
@@ -1354,36 +1363,6 @@ PanelWindow {
                             parent: idleSettingsMouse
                             visible: idleSettingsMouse.containsMouse
                             text: "Settings"
-                        }
-                    }
-                }
-
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: qNoteMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: qNoteMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰈙"
-                        color: qNoteMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 18
-                    }
-
-                    MouseArea {
-                        id: qNoteMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.openQNote()
-                        ShellToolTip {
-                            parent: qNoteMouse
-                            visible: qNoteMouse.containsMouse
-                            text: "QNote · Sticky note"
                         }
                     }
                 }

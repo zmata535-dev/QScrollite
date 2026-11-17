@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -15,6 +16,45 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qscrollite-bluetooth-manager"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    property real cardX: -600
+    property real openTargetX: 12
+
+    function positionOppositeFocusedWindow() {
+        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x, root.width, card.width, 12)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 12)
+        slideIn.to = openTargetX
+        slideIn.restart()
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "cardX"
+        to: root.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            if (!root.visible) return
+            Qt.callLater(function() {
+                if (!root.visible) return
+                root.positionOppositeFocusedWindow()
+                slideIn.stop()
+                slideIn.to = root.openTargetX
+                slideIn.restart()
+            })
+        }
+    }
+
+    Component.onCompleted: openFromOppositeSide()
+
     Item {
         anchors.fill: parent
         focus: true
@@ -35,7 +75,8 @@ PanelWindow {
             id: card
             width: Math.min(580, root.width - 32)
             height: Math.min(560, root.height - 32)
-            anchors.centerIn: parent
+            x: root.cardX
+            y: (parent.height - height) / 2
             radius: 14
             color: "#111722"
             border.color: "#3b4a63"
@@ -44,6 +85,7 @@ PanelWindow {
             MouseArea { anchors.fill: parent; onClicked: {} }
 
             ColumnLayout {
+                z: 1
                 anchors.fill: parent
                 anchors.margins: 16
                 spacing: 10

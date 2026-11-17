@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -22,7 +23,7 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-calendar"
-    WlrLayershell.keyboardFocus: root.otherComponentOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: root.otherComponentOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
 
     readonly property bool pairedWithNotifications: service.notificationService
         ? service.notificationService.notificationCenterOpen : false
@@ -32,8 +33,50 @@ PanelWindow {
         || (service.wallpaperService && service.wallpaperService.selectorOpen)
     readonly property real pairedCalendarWidth: Math.min(388, (root.width - 48) * 0.38)
     readonly property real pairedNotificationWidth: Math.min(560, (root.width - 48) * 0.56)
+    readonly property real dayCellHeight: Math.max(12, Math.min(38, (root.height - 204) / 6))
     property var pairedInputRegion: Region { item: card }
     mask: pairedInputRegion
+    property real cardX: -500
+    property real openTargetX: 12
+
+    function positionOppositeFocusedWindow() {
+        var totalWidth = pairedWithNotifications
+            ? pairedCalendarWidth + 14 + pairedNotificationWidth : card.width
+        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
+            root.width, totalWidth, 12)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        cardX = PanelPlacement.entryX(openTargetX, root.width,
+            pairedWithNotifications ? pairedCalendarWidth + 14 + pairedNotificationWidth : card.width,
+            root.screen.x, 12)
+        slideIn.to = openTargetX
+        slideIn.restart()
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            if (!root.visible) return
+            Qt.callLater(function() {
+                if (!root.visible) return
+                root.positionOppositeFocusedWindow()
+                slideIn.stop()
+                slideIn.to = root.openTargetX
+                slideIn.restart()
+            })
+        }
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "cardX"
+        to: 0
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
 
     property var monthDate: {
         var now = new Date()
@@ -107,23 +150,18 @@ PanelWindow {
             id: card
             width: root.pairedWithNotifications
                 ? root.pairedCalendarWidth : Math.min(388, root.width - 32)
-            height: calendarColumn.implicitHeight + 36
-            x: root.pairedWithNotifications
-                ? (root.width - root.pairedCalendarWidth - 14 - root.pairedNotificationWidth) / 2
-                : (root.width - width) / 2
-            anchors.verticalCenter: parent.verticalCenter
+            height: Math.min(calendarColumn.implicitHeight + 36, root.height - 32)
+            x: root.cardX
+            y: (root.height - height) / 2
+            clip: true
             radius: 14
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
 
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {}
-            }
-
             ColumnLayout {
                 id: calendarColumn
+                z: 1
                 anchors.fill: parent
                 anchors.margins: 18
                 spacing: 14
@@ -183,6 +221,17 @@ horizontalAlignment: Text.AlignHCenter
                         }
                     }
 
+                    ShellButton {
+                        focusPolicy: Qt.NoFocus
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        implicitWidth: 32
+                        implicitHeight: 32
+                        font.pixelSize: 17
+                        text: "×"
+                        onClicked: root.closeCalendar()
+                    }
+
                 }
 
                 GridLayout {
@@ -211,7 +260,7 @@ horizontalAlignment: Text.AlignHCenter
                         Rectangle {
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 38
+                            Layout.preferredHeight: root.dayCellHeight
                             radius: 6
                             color: modelData.isSelected ? "#22334f"
                                 : (modelData.isToday ? "#1d2a3e"
@@ -312,6 +361,11 @@ horizontalAlignment: Text.AlignHCenter
 
     Component.onCompleted: {
         rebuildDays()
-        Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+        if (visible) {
+            Qt.callLater(function() {
+                if (!root.visible) return
+                openFromOppositeSide()
+            })
+        }
     }
 }

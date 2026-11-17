@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -16,7 +17,47 @@ PanelWindow {
     anchors { top: true; bottom: true; left: true; right: true }
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-qsysmon"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    mask: Region { item: card }
+    property real cardX: 0
+    property real openTargetX: 0
+
+    function positionOppositeFocusedWindow() {
+        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x, root.width, card.width, 16)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 16)
+        slideIn.to = openTargetX
+        slideIn.restart()
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            if (!root.visible) return
+            Qt.callLater(function() {
+                if (!root.visible) return
+                root.positionOppositeFocusedWindow()
+                slideIn.stop()
+                slideIn.to = root.openTargetX
+                slideIn.restart()
+            })
+        }
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "cardX"
+        to: root.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Component.onCompleted: openFromOppositeSide()
 
     property real cpuPercent: 0
     property real memoryPercent: 0
@@ -210,32 +251,21 @@ PanelWindow {
     Item {
         anchors.fill: parent
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: root.close()
-        }
-
         Rectangle {
             id: card
             width: Math.min(372, root.width - 32)
             height: Math.min(content.implicitHeight + 32, root.height - 64)
-            anchors.centerIn: parent
+            x: root.cardX
+            y: (parent.height - height) / 2
+            opacity: 0.69
             radius: 14
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
-            focus: true
-
-            Keys.onPressed: function(event) {
-                if (event.key === Qt.Key_Escape) {
-                    root.close()
-                    event.accepted = true
-                }
-            }
-
             MouseArea { anchors.fill: parent; onClicked: {} }
 
             ColumnLayout {
+                z: 1
                 id: content
                 anchors.fill: parent
                 anchors.margins: 16

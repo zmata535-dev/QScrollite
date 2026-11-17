@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -11,10 +12,8 @@ PanelWindow {
 
     screen: Quickshell.screens[0]
     visible: service.qNoteOpen
-    implicitWidth: Math.min(270, screen.width)
-    implicitHeight: screen.height
     color: "transparent"
-    anchors { top: true; bottom: true; left: true }
+    anchors { top: true; bottom: true; left: true; right: true }
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qscrollite-qnote"
@@ -23,7 +22,9 @@ PanelWindow {
         ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     mask: Region { Region { item: noteCard } }
 
-    property real slideOffset: 380
+    property real cardX: -300
+    property real openTargetX: 12
+    property real exitX: -300
     property bool closing: false
     property int openPresetMenuIndex: -1
     property var focusedNoteField: null
@@ -164,7 +165,34 @@ PanelWindow {
     function close() {
         if (closing) return
         closing = true
+        exitX = PanelPlacement.entryX(cardX, root.width, noteCard.width, root.screen.x, 12)
+        slideOut.to = exitX
         slideOut.start()
+    }
+
+    function positionOppositeFocusedWindow() {
+        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x, root.width, noteCard.width, 12)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        cardX = PanelPlacement.entryX(openTargetX, root.width, noteCard.width, root.screen.x, 12)
+        slideIn.to = openTargetX
+        slideIn.restart()
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            if (!root.visible || root.closing) return
+            Qt.callLater(function() {
+                if (!root.visible || root.closing) return
+                root.positionOppositeFocusedWindow()
+                slideIn.stop()
+                slideIn.to = root.openTargetX
+                slideIn.restart()
+            })
+        }
     }
 
     Shortcut {
@@ -177,9 +205,8 @@ PanelWindow {
     NumberAnimation {
         id: slideIn
         target: root
-        property: "slideOffset"
-        from: -380
-        to: 0
+        property: "cardX"
+        to: root.openTargetX
         duration: 300
         easing.type: Easing.OutCubic
     }
@@ -187,9 +214,9 @@ PanelWindow {
     NumberAnimation {
         id: slideOut
         target: root
-        property: "slideOffset"
-        from: 0
-        to: -380
+        property: "cardX"
+        from: root.cardX
+        to: root.exitX
         duration: 240
         easing.type: Easing.InCubic
         onFinished: root.service.closeQNote()
@@ -197,15 +224,15 @@ PanelWindow {
 
     Component.onCompleted: {
         ensureNotes()
-        slideIn.start()
+        openFromOppositeSide()
     }
 
     Rectangle {
         id: noteCard
-        width: root.width
+        width: Math.min(270, root.width)
         height: Math.min(680, root.height - 32)
         // Negative offsets move the card beyond the panel's left edge.
-        x: root.slideOffset
+        x: root.cardX
         y: Math.max(16, Math.round((root.height - height) / 2))
         radius: root.cornerRadius
         opacity: root.focusedNoteField ? 1 : 0.92

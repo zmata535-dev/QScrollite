@@ -40,8 +40,8 @@ PanelWindow {
         || (service.notificationService && service.notificationService.notificationCenterOpen)
 
     function closeOnFocusLoss() {
-        if (!service.clockOpen || service.activeWorkspaceEmpty) return
-        service.requestClockClose()
+        if (!service.clockOpen) return
+        service.requestClockClose(true)
     }
 
     onOtherComponentOpenChanged: {
@@ -57,7 +57,7 @@ PanelWindow {
             Qt.callLater(function() { root.closeOnFocusLoss() })
         }
         function onActiveWorkspaceEmptyChanged() {
-            if (!root.service.activeWorkspaceEmpty && root.otherComponentOpen)
+            if (root.otherComponentOpen)
                 root.closeOnFocusLoss()
         }
     }

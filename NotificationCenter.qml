@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -45,7 +46,8 @@ PanelWindow {
                 ? root.pairedNotificationWidth : Math.min(560, root.width - 32)
             height: Math.min(520, root.height - 32)
             x: root.pairedWithCalendar
-                ? (root.width - root.pairedCalendarWidth - 14 - root.pairedNotificationWidth) / 2
+                ? PanelPlacement.oppositeTargetX(root.service.switcherService, root.screen.x,
+                    root.width, root.pairedCalendarWidth + 14 + root.pairedNotificationWidth, 12)
                     + root.pairedCalendarWidth + 14
                 : (root.width - width) / 2
             anchors.verticalCenter: parent.verticalCenter

@@ -11,6 +11,7 @@ QtObject {
     property int slideshowInterval: 0
     property bool selectorOpen: false
     property bool isScanning: false
+    property bool hasScanned: false
     property bool stateLoaded: false
 
     readonly property string intervalLabel: {
@@ -112,10 +113,12 @@ QtObject {
 
     function toggleSelector() {
         selectorOpen = !selectorOpen;
+        if (selectorOpen && !hasScanned) scan();
     }
 
     function openSelector() {
         selectorOpen = true;
+        if (!hasScanned) scan();
     }
 
     function closeSelector() {
@@ -167,37 +170,27 @@ QtObject {
             "-c",
             "find -L ~/Pictures ~/Wallpapers ~/wallpapers ~/.local/share/wallpapers -maxdepth 4 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.bmp' \\) 2>/dev/null | sort -u"
         ]
-        running: true
+        running: false
 
         stdout: StdioCollector {
-            onTextChanged: {
-                if (text && text.trim().length > 0) {
-                    var lines = text.trim().split("\n").filter(function(l) { return l.length > 0; });
-                    service.wallpapers = lines;
+            id: scannerOutput
+        }
+        onExited: function(exitCode, exitStatus) {
+            var output = String(scannerOutput.text || "").trim()
+            var lines = output.length
+                ? output.split("\n").filter(function(path) { return path.length > 0; })
+                : []
+            service.wallpapers = lines
+            service.hasScanned = true
+            service.isScanning = false
 
-                    // Update currentIndex
-                    var found = -1;
-                    if (service.currentWallpaper) {
-                        for (var i = 0; i < lines.length; i++) {
-                            if (lines[i] === service.currentWallpaper) {
-                                found = i;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (found !== -1) {
-                        service.currentIndex = found;
-                    } else if (lines.length > 0) {
-                        // If no current wallpaper or existing not found, pick first
-                        if (!service.currentWallpaper) {
-                            service.currentIndex = 0;
-                            service.currentWallpaper = lines[0];
-                            service.saveState();
-                        }
-                    }
-                }
-                service.isScanning = false;
+            var found = service.currentWallpaper ? lines.indexOf(service.currentWallpaper) : -1
+            if (found !== -1) {
+                service.currentIndex = found
+            } else if (lines.length > 0 && !service.currentWallpaper) {
+                service.currentIndex = 0
+                service.currentWallpaper = lines[0]
+                service.saveState()
             }
         }
     }
@@ -213,7 +206,4 @@ QtObject {
         }
     }
 
-    Component.onCompleted: {
-        scan();
-    }
 }

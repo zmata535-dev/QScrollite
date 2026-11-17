@@ -65,6 +65,7 @@ ShellRoot {
 
         WallpaperSelector {
             service: root.wallpaperService
+            switcherService: switcherService
         }
     }
 

@@ -24,17 +24,133 @@ PanelWindow {
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-gdictcalc"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: visible && focusedInput && cardHover.hovered
+        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    mask: Region { item: card }
+    property real cardX: 12
+    property real openTargetX: 12
+    property string openEdge: "left"
+    property string focusAtOpen: ""
+    property var focusedInput: null
+
+    function focusedWindowGeometry() {
+        if (service.activeCompositor !== "hyprland") return null
+        var targetId = String(service.activeWindowId || "")
+        var workspaceList = service.workspaces || []
+        for (var i = 0; i < workspaceList.length; i++) {
+            var windows = workspaceList[i].windows || []
+            for (var j = 0; j < windows.length; j++) {
+                if (String(windows[j].id) === targetId) return windows[j]
+            }
+        }
+        return null
+    }
+
+    function updateOpenTarget() {
+        var geometry = focusedWindowGeometry()
+        var screenLeft = Number(root.screen.x || 0)
+        var appLeftX = geometry
+            ? Number(geometry.x || 0)
+            : screenLeft + root.width
+        openEdge = appLeftX < screenLeft + root.width / 2 ? "right" : "left"
+        openTargetX = openEdge === "right"
+            ? root.width - card.width - 12 : 12
+    }
+
+    function placeOppositeFocusedWindow() {
+        updateOpenTarget()
+        cardX = openEdge === "right" ? root.width + 12 : -card.width - 12
+    }
+
+    function openAtOppositeSide() {
+        if (!visible || slideIn.running) return
+        releaseKeyboardFocus()
+        focusAtOpen = String(service.activeWindowId || "")
+        placeOppositeFocusedWindow()
+        slideIn.restart()
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "cardX"
+        to: root.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: moveToOpenSide
+        target: root
+        property: "cardX"
+        to: root.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() {
+            if (!root.visible) return
+            var activeId = String(root.service.activeWindowId || "")
+            if (!activeId) return
+            if (!root.focusAtOpen) {
+                root.focusAtOpen = activeId
+                return
+            }
+            if (activeId === root.focusAtOpen) return
+            root.focusAtOpen = activeId
+            Qt.callLater(function() {
+                if (!root.visible || String(root.service.activeWindowId || "") !== activeId) return
+                root.updateOpenTarget()
+                slideIn.stop()
+                moveToOpenSide.restart()
+            })
+        }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+T"
+        context: Qt.WindowShortcut
+        enabled: root.visible
+        onActivated: root.searchGoogle("translate")
+    }
+    Shortcut {
+        sequence: "Ctrl+W"
+        context: Qt.WindowShortcut
+        enabled: root.visible
+        onActivated: root.searchWeather()
+    }
+    Shortcut {
+        sequence: "Ctrl+P"
+        context: Qt.WindowShortcut
+        enabled: root.visible
+        onActivated: root.searchGoogle("price")
+    }
+    Shortcut {
+        sequence: "Ctrl+O"
+        context: Qt.WindowShortcut
+        enabled: root.visible
+        onActivated: root.searchGoogle("convert")
+    }
 
     property bool dictionaryMode: false
+    property bool definitionRequested: false
     property string expression: String(service.gDictCalcInitialQuery || "")
     property string statusText: ""
     property string lastGoogleQuery: ""
     property string lastGoogleUrl: ""
     property string googleResultTitle: ""
     property string googleResultText: ""
+    property string dictionaryPhonetic: ""
+    property var dictionaryMeanings: []
+    property bool weatherResult: false
+    property bool dictionaryApiResult: false
     property bool searching: false
     property int googleSearchGeneration: 0
+    readonly property string weatherUrl: "https://wttr.in/" +
+        encodeURIComponent(weatherProcess.location).replace(/%20/g, "+")
+    readonly property string weatherImageUrl: weatherUrl + ".png?Fnd"
     readonly property string calculationResult: {
         var result = Scientific.evaluate(expression)
         return result ? result.value : ""
@@ -96,8 +212,128 @@ PanelWindow {
         }
     }
 
+    Process {
+        id: weatherProcess
+        property string location: ""
+        command: ["curl", "--fail", "--silent", "--show-error", "--max-time", "15",
+            root.weatherUrl + "?format=j1"]
+        running: false
+        stdout: StdioCollector { id: weatherOutput }
+        stderr: StdioCollector { id: weatherError }
+
+        onExited: function(exitCode, exitStatus) {
+            root.searching = false
+            if (exitCode !== 0) {
+                root.statusText = "Weather service request failed."
+                root.googleResultText = weatherError.text.trim() || "Check your network connection and try again."
+                return
+            }
+            var resolvedLocation = location
+            try {
+                var data = JSON.parse(String(weatherOutput.text || "").trim())
+                var area = data.nearest_area && data.nearest_area.length ? data.nearest_area[0] : null
+                if (area) {
+                    var locationParts = [area.areaName, area.region, area.country].map(function(value) {
+                        return value && value.length ? String(value[0].value || "").trim() : ""
+                    }).filter(function(value, index, values) {
+                        return value && values.indexOf(value) === index
+                    })
+                    if (locationParts.length) resolvedLocation = locationParts.join(", ")
+                }
+            } catch (e) {}
+            root.statusText = ""
+            root.googleResultTitle = "Weather report: " + location + " ~ " + resolvedLocation
+            root.googleResultText = ""
+        }
+    }
+
+    Process {
+        id: dictionaryProcess
+        property string word: ""
+        command: ["curl", "--fail", "--silent", "--show-error", "--max-time", "12",
+            "https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word)]
+        running: false
+        stdout: StdioCollector { id: dictionaryOutput }
+        stderr: StdioCollector { id: dictionaryError }
+
+        onExited: function(exitCode, exitStatus) {
+            root.searching = false
+            if (exitCode !== 0) {
+                root.searchGoogle("translate", true)
+                return
+            }
+            try {
+                var entries = JSON.parse(dictionaryOutput.text.trim())
+                var entry = entries && entries.length ? entries[0] : null
+                if (!entry || !entry.meanings || !entry.meanings.length) {
+                    root.searchGoogle("translate", true)
+                    return
+                }
+                var phonetic = String(entry.phonetic || "")
+                if (!phonetic && entry.phonetics) {
+                    for (var phoneticIndex = 0; phoneticIndex < entry.phonetics.length; phoneticIndex++) {
+                        if (entry.phonetics[phoneticIndex].text) {
+                            phonetic = String(entry.phonetics[phoneticIndex].text)
+                            break
+                        }
+                    }
+                }
+                var meanings = []
+                for (var meaningIndex = 0; meaningIndex < entry.meanings.length; meaningIndex++) {
+                    var sourceMeaning = entry.meanings[meaningIndex]
+                    var definitions = []
+                    var sourceDefinitions = sourceMeaning.definitions || []
+                    for (var definitionIndex = 0; definitionIndex < sourceDefinitions.length; definitionIndex++) {
+                        var sourceDefinition = sourceDefinitions[definitionIndex]
+                        if (!sourceDefinition.definition) continue
+                        definitions.push({
+                            definition: String(sourceDefinition.definition),
+                            example: String(sourceDefinition.example || "")
+                        })
+                    }
+                    if (definitions.length) meanings.push({
+                        partOfSpeech: String(sourceMeaning.partOfSpeech || "Definition"),
+                        definitions: definitions
+                    })
+                }
+                if (!meanings.length) {
+                    root.searchGoogle("translate", true)
+                    return
+                }
+                root.dictionaryApiResult = true
+                root.weatherResult = false
+                root.dictionaryPhonetic = phonetic
+                root.dictionaryMeanings = meanings
+                root.statusText = ""
+                root.googleResultTitle = String(entry.word || dictionaryProcess.word)
+                root.googleResultText = root.formatDefinitions(root.googleResultTitle, phonetic, meanings)
+                root.dictionaryMode = true
+                root.searching = false
+            } catch (e) {
+                root.searchGoogle("translate", true)
+            }
+        }
+    }
+
     function close() {
         service.gDictCalcOpen = false
+    }
+
+    function setInputFocus(field, focused) {
+        if (focused) {
+            focusedInput = field
+            return
+        }
+        Qt.callLater(function() {
+            if (root.focusedInput === field && !field.activeFocus)
+                root.focusedInput = null
+        })
+    }
+
+    function releaseKeyboardFocus() {
+        var field = focusedInput
+        focusedInput = null
+        if (field) field.focus = false
     }
 
     function handleShortcut(event) {
@@ -128,6 +364,25 @@ PanelWindow {
         Quickshell.execDetached(["bash", "-c", "printf '%s' \"$1\" | wl-copy", "gdictcalc-copy", calculationResult])
     }
 
+    function copyResult() {
+        if (!googleResultText) return
+        Quickshell.execDetached(["bash", "-c", "printf '%s' \"$1\" | wl-copy", "gdictcalc-copy-result", googleResultText])
+    }
+
+    function formatDefinitions(word, phonetic, meanings) {
+        var lines = [String(word || "") + (phonetic ? "  " + phonetic : "")]
+        for (var i = 0; i < meanings.length; i++) {
+            var meaning = meanings[i]
+            lines.push(String(meaning.partOfSpeech || "Definition").toUpperCase())
+            for (var j = 0; j < meaning.definitions.length; j++) {
+                var item = meaning.definitions[j]
+                lines.push("• " + item.definition)
+                if (item.example) lines.push("  Example: “" + item.example + "”")
+            }
+        }
+        return lines.join("\n")
+    }
+
     function calculate() {
         if (!calculationResult) return
         expression = calculationResult
@@ -137,7 +392,7 @@ PanelWindow {
         })
     }
 
-    function searchGoogle(kind) {
+    function searchGoogle(kind, skipDictionary) {
         if (googleSearchProcess.running) {
             statusText = "Wait for the current Google search to finish."
             return
@@ -149,6 +404,10 @@ PanelWindow {
         }
 
         var text = value
+        weatherResult = false
+        dictionaryApiResult = false
+        dictionaryMeanings = []
+        dictionaryPhonetic = ""
         if (kind === "translate") text = value + " in " + languageSelect.currentText
         else if (kind === "convert") {
             var target = convertCategory.currentIndex === 4
@@ -160,6 +419,21 @@ PanelWindow {
             text = "convert " + value + " to " + target
         }
         else if (kind === "price") text = value + " current price"
+
+        definitionRequested = kind === "translate"
+
+        if (kind === "translate" && skipDictionary !== true) {
+            lastGoogleQuery = text
+            lastGoogleUrl = "https://www.google.com/search?q=" + encodeURIComponent(text).replace(/%20/g, "+")
+            dictionaryProcess.word = value
+            dictionaryMode = true
+            googleResultTitle = ""
+            googleResultText = ""
+            statusText = "Looking up the definition…"
+            searching = true
+            dictionaryProcess.running = true
+            return
+        }
 
         lastGoogleQuery = text
         lastGoogleUrl = "https://www.google.com/search?q=" + encodeURIComponent(text).replace(/%20/g, "+")
@@ -177,55 +451,79 @@ PanelWindow {
         })
     }
 
-    Component.onCompleted: {
-        Qt.callLater(function() {
-            if (root.visible) {
-                calcField.forceActiveFocus()
-            }
-        })
+    function searchWeather() {
+        if (weatherProcess.running || googleSearchProcess.running) {
+            statusText = "Wait for the current search to finish."
+            return
+        }
+        var place = expression.trim()
+        if (!place) {
+            statusText = "Enter a city or location first."
+            return
+        }
+        weatherResult = true
+        dictionaryApiResult = false
+        definitionRequested = false
+        weatherProcess.location = place
+        dictionaryMode = true
+        googleResultTitle = ""
+        googleResultText = ""
+        statusText = "Fetching today's weather…"
+        lastGoogleUrl = weatherImageUrl
+        searching = true
+        weatherProcess.running = true
     }
 
     onVisibleChanged: {
-        if (visible) Qt.callLater(function() {
-            if (root.dictionaryMode) return
-            calcField.forceActiveFocus()
-        })
+        if (visible) {
+            moveToOpenSide.stop()
+            openAtOppositeSide()
+        } else {
+            slideIn.stop()
+            moveToOpenSide.stop()
+            releaseKeyboardFocus()
+        }
+    }
+
+    Component.onCompleted: {
+        if (visible) openAtOppositeSide()
     }
 
     Item {
         anchors.fill: parent
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: root.close()
-        }
-
         Rectangle {
             id: card
-            width: Math.min(520, root.width - 32)
-            height: Math.min(content.implicitHeight + 32, root.height - 64)
-            anchors.centerIn: parent
+            width: Math.min(480, root.width - 24)
+            height: Math.min(content.implicitHeight + 24, root.height - 48)
+            x: root.cardX
+            y: (parent.height - height) / 2
             radius: 14
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
 
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {}
+            HoverHandler {
+                id: cardHover
+                onHoveredChanged: {
+                    if (!hovered) root.releaseKeyboardFocus()
+                }
             }
 
             ColumnLayout {
+                z: 1
                 id: content
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                anchors.margins: 12
+                spacing: 7
 
                 RowLayout {
                     Layout.fillWidth: true
 
                     Text {
-                        text: root.dictionaryMode ? "Google result" : "GDictCalc · Scientific"
+                        text: root.dictionaryMode
+                            ? (root.definitionRequested ? "Definition" : "Google result")
+                            : "GDictCalc"
                         color: "#e2e8f0"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 17
@@ -234,10 +532,12 @@ PanelWindow {
                     Item { Layout.fillWidth: true }
 
                     ShellButton {
+                        focusPolicy: Qt.NoFocus
                         visible: root.dictionaryMode
                         text: "Calculator"
                         onClicked: {
                             root.dictionaryMode = false
+                            root.definitionRequested = false
                             root.statusText = ""
                             root.lastGoogleUrl = ""
                             root.googleResultTitle = ""
@@ -249,6 +549,7 @@ PanelWindow {
                     }
 
                     ShellButton {
+                        focusPolicy: Qt.NoFocus
                         text: "×"
                         onClicked: root.close()
                     }
@@ -256,7 +557,7 @@ PanelWindow {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 5
 
                     ShellTextField {
                         id: calcField
@@ -268,9 +569,11 @@ PanelWindow {
                         selectByMouse: true
                         onTextEdited: root.expression = text
                         onAccepted: root.calculate()
+                        onActiveFocusChanged: root.setInputFocus(calcField, activeFocus)
                         Keys.onPressed: function(event) { root.handleShortcut(event) }
 
                         ShellButton {
+                            focusPolicy: Qt.NoFocus
                             anchors.right: parent.right
                             anchors.rightMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
@@ -288,26 +591,28 @@ PanelWindow {
                     RowLayout {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 5
                         Text { text: "Translate to"; color: "#94a3b8"; font.pixelSize: 11 }
                         ShellComboBox {
                             id: languageSelect
                             Layout.fillWidth: true
                             model: root.languages
                             currentIndex: 0
+                            onActiveFocusChanged: root.setInputFocus(languageSelect, activeFocus)
                         }
                     }
 
                     RowLayout {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 5
                         Text { text: "Convert"; color: "#94a3b8"; font.pixelSize: 11 }
                         ShellComboBox {
                             id: convertCategory
                             Layout.preferredWidth: 125
                             model: ["Currencies", "Length", "Weight", "Tech units", "Custom"]
                             onActivated: targetSelect.currentIndex = 0
+                            onActiveFocusChanged: root.setInputFocus(convertCategory, activeFocus)
                         }
                         ShellComboBox {
                             id: targetSelect
@@ -315,6 +620,7 @@ PanelWindow {
                             visible: convertCategory.currentIndex !== 4
                             model: root.targetOptions
                             currentIndex: 0
+                            onActiveFocusChanged: root.setInputFocus(targetSelect, activeFocus)
                         }
                         ShellTextField {
                             id: customTarget
@@ -322,6 +628,7 @@ PanelWindow {
                             visible: convertCategory.currentIndex === 4
                             placeholderText: "Enter target unit or currency"
                             onAccepted: root.searchGoogle("convert")
+                            onActiveFocusChanged: root.setInputFocus(customTarget, activeFocus)
                         }
                     }
 
@@ -330,46 +637,65 @@ PanelWindow {
                         Layout.fillWidth: true
                         spacing: 8
                         ShellButton {
+                            focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
-                            text: "Translate"
+                            implicitHeight: 25
+                            text: "T̲ranslate"
+                            enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.searchGoogle("translate")
                         }
                         ShellButton {
+                            focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
-                            text: "Convert"
+                            implicitHeight: 25
+                            text: "Co̲nvert"
+                            enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.searchGoogle("convert")
                         }
                         ShellButton {
+                            focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
-                            text: "Price"
+                            implicitHeight: 25
+                            text: "P̲rice"
+                            enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.searchGoogle("price")
+                        }
+                        ShellButton {
+                            focusPolicy: Qt.NoFocus
+                            Layout.fillWidth: true
+                            implicitHeight: 25
+                            text: "W̲eather"
+                            enabled: root.expression.trim().length > 0
+                            accent: true
+                            onClicked: root.searchWeather()
                         }
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: root.dictionaryMode
-                            ? Math.min(260, resultColumn.implicitHeight + 20) : 48
+                            ? Math.min(220, resultColumn.implicitHeight + 16) : 42
                         radius: 7
                         color: "#161d2a"
                         border.color: "#2b364a"
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 8
+                            anchors.margins: 6
                             visible: !root.dictionaryMode
                             Text {
                                 Layout.fillWidth: true
                                 text: root.calculationResult || (root.expression.length ? "Invalid expression" : "Enter an expression")
                                 color: root.calculationResult ? "#abc7ff" : "#8092ab"
                                 font.family: "JetBrainsMono Nerd Font Mono"
-                                font.pixelSize: 16
+                                font.pixelSize: 14
                                 elide: Text.ElideRight
                             }
                             ShellButton {
+                                focusPolicy: Qt.NoFocus
                                 text: "Copy"
                                 enabled: !!root.calculationResult
                                 onClicked: root.copyCalculation()
@@ -379,8 +705,8 @@ PanelWindow {
                         ColumnLayout {
                             id: resultColumn
                             anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 6
+                            anchors.margins: 8
+                            spacing: 4
                             visible: root.dictionaryMode
 
                             Text {
@@ -394,7 +720,9 @@ PanelWindow {
                             }
                             Text {
                                 Layout.fillWidth: true
-                                text: root.googleResultTitle
+                                text: root.googleResultTitle +
+                                    (root.dictionaryApiResult && root.dictionaryPhonetic
+                                        ? "  " + root.dictionaryPhonetic : "")
                                 visible: text.length > 0
                                 color: "#abc7ff"
                                 font.family: "JetBrainsMono Nerd Font Mono"
@@ -402,15 +730,86 @@ PanelWindow {
                                 font.bold: true
                                 wrapMode: Text.Wrap
                             }
+                            ShellButton {
+                                focusPolicy: Qt.NoFocus
+                                Layout.alignment: Qt.AlignRight
+                                visible: root.googleResultText.length > 0
+                                implicitHeight: 24
+                                text: "Copy result"
+                                onClicked: root.copyResult()
+                            }
+                            ScrollView {
+                                id: definitionScrollView
+                                visible: root.dictionaryApiResult
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 180
+                                clip: true
+                                ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                                ColumnLayout {
+                                    width: definitionScrollView.availableWidth
+                                    spacing: 7
+
+                                    Repeater {
+                                        model: root.dictionaryMeanings
+
+                                        delegate: ColumnLayout {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            spacing: 3
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.partOfSpeech
+                                                color: "#abc7ff"
+                                                font.family: "JetBrainsMono Nerd Font Mono"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                            }
+
+                                            Repeater {
+                                                model: modelData.definitions
+
+                                                delegate: ColumnLayout {
+                                                    required property var modelData
+                                                    Layout.fillWidth: true
+                                                    spacing: 1
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: "• " + modelData.definition
+                                                        color: "#e2e8f0"
+                                                        font.family: "JetBrainsMono Nerd Font Mono"
+                                                        font.pixelSize: 11
+                                                        wrapMode: Text.Wrap
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        visible: modelData.example.length > 0
+                                                        text: "  Example: “" + modelData.example + "”"
+                                                        color: "#94a3b8"
+                                                        font.family: "JetBrainsMono Nerd Font Mono"
+                                                        font.pixelSize: 10
+                                                        wrapMode: Text.Wrap
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             Flickable {
                                 id: googleAnswerFlickable
-                                visible: root.googleResultText.length > 0
+                                visible: root.googleResultText.length > 0 && !root.weatherResult && !root.dictionaryApiResult
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: Math.min(210, googleAnswerText.implicitHeight)
+                                Layout.preferredHeight: 180
                                 contentWidth: width
-                                contentHeight: googleAnswerText.implicitHeight
+                                contentHeight: Math.max(height, googleAnswerText.implicitHeight)
                                 clip: true
                                 boundsBehavior: Flickable.StopAtBounds
+
                                 Text {
                                     id: googleAnswerText
                                     width: googleAnswerFlickable.width
@@ -418,14 +817,41 @@ PanelWindow {
                                     color: "#e2e8f0"
                                     font.family: "JetBrainsMono Nerd Font Mono"
                                     font.pixelSize: 11
+                                    textFormat: Text.PlainText
                                     wrapMode: Text.Wrap
                                 }
+
                                 ScrollBar.vertical: ScrollBar { }
+                            }
+                            Flickable {
+                                id: weatherImageFlickable
+                                visible: root.weatherResult && root.googleResultTitle.length > 0
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 190
+                                contentWidth: Math.max(width, weatherImage.width)
+                                contentHeight: Math.max(height, weatherImage.height)
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                Image {
+                                    id: weatherImage
+                                    width: weatherImageFlickable.width * 1.2
+                                    height: sourceSize.width > 0
+                                        ? width * sourceSize.height / sourceSize.width : weatherImageFlickable.height
+                                    source: weatherImageFlickable.visible ? root.weatherImageUrl : ""
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                    cache: true
+                                }
+
+                                ScrollBar.vertical: ScrollBar { }
+                                ScrollBar.horizontal: ScrollBar { }
                             }
                             Text {
                                 Layout.fillWidth: true
                                 visible: root.lastGoogleUrl.length > 0
-                                text: "Open Google search ↗"
+                                text: root.weatherResult ? "Open wttr.in ↗" :
+                                    (root.dictionaryApiResult ? "Translate to " + languageSelect.currentText + " ↗" : "Open Google search ↗")
                                 color: "#abc7ff"
                                 font.family: "JetBrainsMono Nerd Font Mono"
                                 font.pixelSize: 11
@@ -442,8 +868,8 @@ PanelWindow {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
                         columns: 4
-                        rowSpacing: 5
-                        columnSpacing: 5
+                        rowSpacing: 4
+                        columnSpacing: 4
 
                         Repeater {
                             model: [
@@ -459,8 +885,11 @@ PanelWindow {
 
                             delegate: ShellButton {
                                 required property string modelData
+                                focusPolicy: Qt.NoFocus
                                 Layout.fillWidth: true
+                                implicitHeight: 25
                                 text: modelData
+                                enabled: modelData !== "=" || root.expression.trim().length > 0
                                 accent: modelData === "="
                                 onClicked: {
                                     if (modelData === "C") root.expression = ""

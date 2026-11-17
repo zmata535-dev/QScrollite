@@ -4,11 +4,13 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: selectorWindow
 
     required property var service
+    required property var switcherService
 
     screen: Quickshell.screens[0]
     visible: service.selectorOpen
@@ -23,6 +25,44 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-wallpaper-picker"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    property real cardX: -1000
+    property real openTargetX: 12
+
+    function positionOppositeFocusedWindow() {
+        openTargetX = PanelPlacement.oppositeTargetX(switcherService, selectorWindow.screen.x,
+            selectorWindow.width, modalBox.width, 12)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        cardX = PanelPlacement.entryX(openTargetX, selectorWindow.width, modalBox.width,
+            selectorWindow.screen.x, 12)
+        slideIn.to = openTargetX
+        slideIn.restart()
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: selectorWindow
+        property: "cardX"
+        to: selectorWindow.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: switcherService
+        function onActiveWindowIdChanged() {
+            if (!selectorWindow.visible) return
+            Qt.callLater(function() {
+                if (!selectorWindow.visible) return
+                selectorWindow.positionOppositeFocusedWindow()
+                slideIn.stop()
+                slideIn.to = selectorWindow.openTargetX
+                slideIn.restart()
+            })
+        }
+    }
 
     color: "#35080c16"
 
@@ -78,6 +118,7 @@ PanelWindow {
     Component.onCompleted: {
         searchQuery = "";
         searchInput.text = "";
+        openFromOppositeSide()
         searchInput.forceActiveFocus();
     }
 
@@ -94,9 +135,10 @@ PanelWindow {
     // Modal Dialog Box
     Rectangle {
         id: modalBox
-        anchors.centerIn: parent
-        width: Math.min(parent.width - 60, 1000)
-        height: Math.min(parent.height - 60, 680)
+        x: selectorWindow.cardX
+        y: (parent.height - height) / 2
+        width: Math.min(parent.width - 40, 860)
+        height: Math.min(parent.height - 40, 440)
         color: "#111722"
         radius: 14
         border.color: "#3b4a63"
@@ -108,36 +150,37 @@ PanelWindow {
         }
 
         ColumnLayout {
+            z: 1
             anchors.fill: parent
-            anchors.margins: 22
-            spacing: 16
+            anchors.margins: 14
+            spacing: 10
 
             // Header Row
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: 8
 
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰸉"
-font.pixelSize: 22
+font.pixelSize: 18
                     color: "#abc7ff"
                 }
 
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Wallpaper Manager"
-                    font.pixelSize: 18
+                    font.pixelSize: 15
 color: "#f0f2fa"
                 }
 
                 Rectangle {
                     color: "#202436"
                     radius: 10
-                    implicitWidth: countLabel.implicitWidth + 16
-                    implicitHeight: 24
+                    implicitWidth: countLabel.implicitWidth + 12
+                    implicitHeight: 20
 
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: countLabel
                         anchors.centerIn: parent
                         text: service.wallpapers.length + " wallpapers"
                         color: "#8990b3"
-                        font.pixelSize: 11
+                        font.pixelSize: 10
                     }
                 }
 
@@ -145,8 +188,8 @@ color: "#f0f2fa"
 
                 // Close Button
                 Rectangle {
-                    implicitWidth: 32
-                    implicitHeight: 32
+                    implicitWidth: 28
+                    implicitHeight: 28
                     radius: 6
                     color: closeMouse.containsMouse ? "#3b1e28" : "#161d2a"
                     border.color: closeMouse.containsMouse ? "#ff6b81" : "#2b364a"
@@ -155,7 +198,7 @@ color: "#f0f2fa"
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "✕"
                         color: closeMouse.containsMouse ? "#ffb3ba" : "#8092ab"
-                        font.pixelSize: 13}
+                        font.pixelSize: 11}
 
                     MouseArea {
                         id: closeMouse
@@ -170,12 +213,13 @@ color: "#f0f2fa"
             // Toolbar Controls
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 6
 
                 // Search input
                 Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: 38
+                    Layout.preferredWidth: Math.max(150, Math.round((modalBox.width - 28) * 0.3))
+                    Layout.minimumWidth: 150
+                    implicitHeight: 32
                     color: "#161d2a"
                     radius: 6
                     border.color: searchInput.activeFocus ? "#abc7ff" : "#2b364a"
@@ -183,19 +227,19 @@ color: "#f0f2fa"
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 10
-                        spacing: 8
+                        anchors.leftMargin: 9
+                        anchors.rightMargin: 8
+                        spacing: 6
 
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰍉"
-font.pixelSize: 14
+font.pixelSize: 12
                             color: "#8092ab"
                         }
 
                         TextInput { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: searchInput
                             Layout.fillWidth: true
                             color: "#dce5f2"
-                            font.pixelSize: 13
+                            font.pixelSize: 11
                             clip: true
                             selectByMouse: true
                             Keys.onEscapePressed: function(event) {
@@ -208,7 +252,7 @@ font.pixelSize: 14
 
                             Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Filter wallpapers..."
                                 color: "#8092ab"
-                                font.pixelSize: 13
+                                font.pixelSize: 11
                                 visible: !searchInput.text && !searchInput.activeFocus
                             }
                         }
@@ -216,8 +260,8 @@ font.pixelSize: 14
                         // Clear search button
                         Rectangle {
                             visible: searchInput.text.length > 0
-                            implicitWidth: 22
-                            implicitHeight: 22
+                            implicitWidth: 20
+                            implicitHeight: 20
                             radius: 6
                             color: clearSearchMouse.containsMouse ? "#273650" : "#161d2a"
                             border.color: clearSearchMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -242,8 +286,8 @@ font.pixelSize: 14
 
                 // Prev Button
                 Rectangle {
-                    implicitWidth: 74
-                    implicitHeight: 38
+                    implicitWidth: 62
+                    implicitHeight: 32
                     radius: 6
                     color: prevMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: prevMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -266,8 +310,8 @@ font.pixelSize: 14
 
                 // Next Button
                 Rectangle {
-                    implicitWidth: 74
-                    implicitHeight: 38
+                    implicitWidth: 62
+                    implicitHeight: 32
                     radius: 6
                     color: nextMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: nextMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -290,8 +334,8 @@ font.pixelSize: 14
 
                 // Random Shuffle Button
                 Rectangle {
-                    implicitWidth: 96
-                    implicitHeight: 38
+                    implicitWidth: 82
+                    implicitHeight: 32
                     radius: 6
                     color: randMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: randMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -301,10 +345,10 @@ font.pixelSize: 14
                         anchors.centerIn: parent
                         spacing: 6
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰒝"
-font.pixelSize: 14
+font.pixelSize: 12
                             color: randMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         }
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Random"; font.pixelSize: 12; color: randMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Random"; font.pixelSize: 11; color: randMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
                     }
                     MouseArea {
                         id: randMouse
@@ -317,8 +361,8 @@ font.pixelSize: 14
 
                 // Slideshow Cycle Button
                 Rectangle {
-                    implicitWidth: 125
-                    implicitHeight: 38
+                    implicitWidth: 106
+                    implicitHeight: 32
                     radius: 6
                     color: timerMouse.containsMouse ? "#273650" : (service.slideshowInterval > 0 ? "#22334f" : "#161d2a")
                     border.color: timerMouse.containsMouse ? "#abc7ff" : (service.slideshowInterval > 0 ? "#5476a4" : "#2b364a")
@@ -328,11 +372,11 @@ font.pixelSize: 14
                         anchors.centerIn: parent
                         spacing: 6
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰥔"
-font.pixelSize: 13
+font.pixelSize: 11
                             color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         }
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Timer: " + service.intervalLabel
-                            font.pixelSize: 12
+                            font.pixelSize: 11
 color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "#dce5f2"
                         }
                     }
@@ -347,8 +391,8 @@ color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "
 
                 // Rescan Button
                 Rectangle {
-                    implicitWidth: 40
-                    implicitHeight: 38
+                    implicitWidth: 34
+                    implicitHeight: 32
                     radius: 6
                     color: scanMouse.containsMouse ? "#273650" : "#161d2a"
                     border.color: scanMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -356,7 +400,7 @@ color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "
 
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                         text: "󰑐"
-font.pixelSize: 14
+font.pixelSize: 12
                         color: scanMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         rotation: service.isScanning ? 360 : 0
                         Behavior on rotation {
@@ -376,29 +420,34 @@ font.pixelSize: 14
             // Gallery Grid
             Item {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.preferredHeight: 284
+                Layout.minimumHeight: 284
+                Layout.maximumHeight: 284
 
                 GridView {
                     id: galleryGrid
                     anchors.fill: parent
                     clip: true
-                    cellWidth: 230
-                    cellHeight: 165
+                    flow: GridView.TopToBottom
+                    flickableDirection: Flickable.HorizontalFlick
+                    cellWidth: 194
+                    cellHeight: 142
                     model: selectorWindow.filteredWallpapers
+                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
 
                     delegate: Item {
                         id: cardItem
                         required property var modelData
                         required property int index
-                        width: 220
-                        height: 155
+                        width: 184
+                        height: 132
 
                         property bool isActive: modelData === service.currentWallpaper
 
                         Rectangle {
                             id: cardBox
                             anchors.fill: parent
-                            radius: 12
+                            radius: 9
                             color: "#181b29"
                             border.color: cardItem.isActive || cardMouse.containsMouse ? "#abc7ff" : "#2b364a"
                             border.width: cardItem.isActive ? 2 : 1
@@ -411,7 +460,7 @@ font.pixelSize: 14
                             ClippingRectangle {
                                 anchors.fill: parent
                                 anchors.margins: cardBox.border.width
-                                radius: 11
+                                radius: 8
 
                                 Image {
                                     anchors.fill: parent
@@ -427,7 +476,7 @@ font.pixelSize: 14
                                     anchors.bottom: parent.bottom
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    height: 38
+                                    height: 30
                                     gradient: Gradient {
                                         GradientStop { position: 0.0; color: "#00000000" }
                                         GradientStop { position: 1.0; color: "#ee0c0f18" }
@@ -436,10 +485,10 @@ font.pixelSize: 14
                                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.bottom: parent.bottom
                                         anchors.left: parent.left
                                         anchors.right: parent.right
-                                        anchors.margins: 8
+                                        anchors.margins: 6
                                         text: modelData.split('/').pop()
                                         color: "#e2e6f3"
-                                        font.pixelSize: 11
+                                        font.pixelSize: 10
                                         elide: Text.ElideMiddle
                                     }
                                 }
@@ -449,18 +498,18 @@ font.pixelSize: 14
                                     visible: cardItem.isActive
                                     anchors.top: parent.top
                                     anchors.right: parent.right
-                                    anchors.margins: 8
+                                    anchors.margins: 6
                                     color: "#062646"
                                     radius: 6
                                     border.color: "#abc7ff"
                                     border.width: 1
                                     implicitWidth: activeLabel.implicitWidth + 12
-                                    implicitHeight: 20
+                                    implicitHeight: 18
 
                                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: activeLabel
                                         anchors.centerIn: parent
                                         text: "✓ ACTIVE"
-                                        font.pixelSize: 9
+                                        font.pixelSize: 8
 color: "#abc7ff"
                                     }
                                 }
@@ -489,18 +538,18 @@ color: "#abc7ff"
 
                         ColumnLayout {
                             anchors.centerIn: parent
-                            spacing: 10
+                            spacing: 6
 
                             Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
                                 text: "󰍉"
-font.pixelSize: 32
+font.pixelSize: 26
                                 color: "#545a78"
                             }
 
                             Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
                                 text: "No wallpapers found matching \"" + selectorWindow.searchQuery + "\""
                                 color: "#8990b3"
-                                font.pixelSize: 13
+                                font.pixelSize: 11
                             }
                         }
                     }
@@ -510,34 +559,20 @@ font.pixelSize: 32
             // Footer / Status Row
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 14
-
-                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Active: " + (service.currentWallpaper ? service.currentWallpaper.split('/').pop() : "None")
-                    color: "#abc7ff"
-                    font.pixelSize: 12
-                    elide: Text.ElideMiddle
-                    Layout.maximumWidth: 350
-                }
-
-                Rectangle {
-                    width: 4
-                    height: 4
-                    radius: 2
-                    color: "#434966"
-                }
+                spacing: 8
 
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: service.slideshowInterval > 0
                         ? "Slideshow active (every " + service.intervalLabel + ")"
                         : "Slideshow paused"
                     color: "#8990b3"
-                    font.pixelSize: 11
+                    font.pixelSize: 10
                 }
 
                 Item { Layout.fillWidth: true }
 
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "[Esc] Close  •  [← / →] Prev/Next  •  [R] Random  •  [F5] Rescan"
                     color: "#5e668c"
-                    font.pixelSize: 11
+                    font.pixelSize: 9
                 }
             }
         }
