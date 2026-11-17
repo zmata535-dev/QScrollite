@@ -144,7 +144,9 @@ PanelWindow {
             height: 212
             anchors.centerIn: parent
             radius: 14
-            color: Qt.rgba(17 / 255, 23 / 255, 34 / 255, root.service.clockCardBackgroundOpacity / 1000)
+            color: Qt.rgba(17 / 255, 23 / 255, 34 / 255,
+                           root.service.activeWorkspaceEmpty ? 0 :
+                               root.service.clockCardBackgroundOpacity / 100)
             border.color: "#3b4a63"
             border.width: 0
             opacity: 1 - root.closeFade

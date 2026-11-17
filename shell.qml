@@ -18,6 +18,37 @@ ShellRoot {
 
     Component.onCompleted: ensureHypridleForQuickShellIdleCallbacks()
 
+    function closeAllShellPanels() {
+        wallpaperService.closeSelector()
+        notifications.closeCenter()
+        switcherService.closeSwitcher(true, true)
+        switcherService.closeBluetoothManager()
+        switcherService.appMenuTimer.stop()
+        switcherService.appMenuPending = false
+        switcherService.appMenuOpen = false
+        switcherService.gDictCalcOpen = false
+        switcherService.qSysMonOpen = false
+        switcherService.qNoteOpen = false
+        switcherService.clipboardOpen = false
+        switcherService.closeCalendar(true)
+        switcherService.clockOpenTimer.stop()
+        switcherService.requestClockClose(true)
+        switcherService.closeCompactClock()
+        switcherService.idleConfigOpen = false
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        enabled: root.wallpaperService.selectorOpen || notifications.notificationCenterOpen ||
+            switcherService.open || switcherService.bluetoothOpen || switcherService.appMenuOpen ||
+            switcherService.appMenuPending || switcherService.gDictCalcOpen || switcherService.qSysMonOpen ||
+            switcherService.clipboardOpen || switcherService.calendarOpen ||
+            switcherService.calendarPending || switcherService.clockOpen || switcherService.compactClockOpen ||
+            switcherService.compactClockPending || switcherService.idleConfigOpen
+        onActivated: root.closeAllShellPanels()
+    }
+
     WallpaperService {
         id: service
     }
@@ -234,13 +265,6 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         HotCornerTopLeft {
-            service: hotCornerService
-        }
-    }
-
-    Variants {
-        model: Quickshell.screens
-        HotEdgeRight {
             service: hotCornerService
         }
     }

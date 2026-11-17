@@ -113,10 +113,9 @@ QtObject {
             cornerTriggered("top-right", screenName || "");
             return true;
         } else if (corner === "top-left") {
-            if (switcherService && !switcherService.topAppSwitcherEnabled) return false;
             if (now - lastTriggerTL < cd) return false;
             lastTriggerTL = now;
-            showAppSwitcher();
+            showQNote();
             cornerTriggered("top-left", screenName || "");
             return true;
         }

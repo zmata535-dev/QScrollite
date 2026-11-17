@@ -14,7 +14,7 @@ PanelWindow {
     implicitWidth: Math.min(270, screen.width)
     implicitHeight: screen.height
     color: "transparent"
-    anchors { top: true; bottom: true; right: true }
+    anchors { top: true; bottom: true; left: true }
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "qscrollite-qnote"
@@ -169,7 +169,7 @@ PanelWindow {
 
     Shortcut {
         sequence: "Escape"
-        context: Qt.WindowShortcut
+        context: Qt.ApplicationShortcut
         enabled: root.service.qNoteOpen
         onActivated: root.close()
     }
@@ -178,7 +178,7 @@ PanelWindow {
         id: slideIn
         target: root
         property: "slideOffset"
-        from: 380
+        from: -380
         to: 0
         duration: 300
         easing.type: Easing.OutCubic
@@ -189,7 +189,7 @@ PanelWindow {
         target: root
         property: "slideOffset"
         from: 0
-        to: 380
+        to: -380
         duration: 240
         easing.type: Easing.InCubic
         onFinished: root.service.closeQNote()
@@ -204,6 +204,7 @@ PanelWindow {
         id: noteCard
         width: root.width
         height: Math.min(680, root.height - 32)
+        // Negative offsets move the card beyond the panel's left edge.
         x: root.slideOffset
         y: Math.max(16, Math.round((root.height - height) / 2))
         radius: root.cornerRadius
@@ -305,6 +306,7 @@ PanelWindow {
                     id: noteItemCard
                     required property int index
                     required property var modelData
+                    property string initialText: ""
                     function focusText() {
                         root.focusedNoteField = noteEditor
                         noteEditor.forceActiveFocus()
@@ -312,6 +314,18 @@ PanelWindow {
                     function choosePreset(colorIndex) {
                         root.updateNoteColor(noteItemCard.index, colorIndex)
                         root.openPresetMenuIndex = -1
+                    }
+                    function insertSymbol(symbol) {
+                        var start = noteEditor.activeFocus ? noteEditor.cursorPosition : noteEditor.text.length
+                        var end = start
+                        if (noteEditor.activeFocus && noteEditor.selectedText.length > 0) {
+                            start = noteEditor.selectionStart
+                            end = noteEditor.selectionEnd
+                        }
+                        noteEditor.forceActiveFocus()
+                        if (end > start) noteEditor.remove(start, end)
+                        noteEditor.insert(start, symbol)
+                        noteEditor.cursorPosition = start + symbol.length
                     }
                     readonly property bool presetMenuOpen: root.openPresetMenuIndex === index
                     width: noteList.width - noteList.leftMargin
@@ -327,6 +341,8 @@ PanelWindow {
                     HoverHandler {
                         id: noteCardHover
                     }
+
+                    Component.onCompleted: initialText = noteEditor.text
 
                     Rectangle {
                         id: presetMenu
@@ -466,6 +482,74 @@ PanelWindow {
                                 onClicked: {
                                     root.openPresetMenuIndex = noteItemCard.presetMenuOpen
                                         ? -1 : noteItemCard.index
+                                }
+                            }
+
+                            Repeater {
+                                model: ["✓", "✕", "○"]
+                                delegate: ShellButton {
+                                    required property var modelData
+                                    Layout.preferredWidth: 22
+                                    implicitWidth: 22
+                                    implicitHeight: 23
+                                    font.pixelSize: 12
+                                    focusPolicy: Qt.NoFocus
+                                    text: modelData
+                                    opacity: 1
+                                    enabled: noteItemCard.noteControlsVisible && noteEditor.activeFocus
+                                    background: Rectangle {
+                                        radius: root.cornerRadius
+                                        color: Qt.darker(noteItemCard.modelData.color,
+                                            !noteItemCard.noteControlsVisible ? 1.35
+                                            : (parent.hovered ? 1.9 : 1.6))
+                                        border.width: 0
+                                    }
+                                    contentItem: Text {
+                                        text: parent.text
+                                        color: parent.enabled
+                                            ? Qt.lighter(noteItemCard.modelData.color, 1.7)
+                                            : (noteItemCard.noteControlsVisible ? "#657188" : "transparent")
+                                        font: parent.font
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    onClicked: noteItemCard.insertSymbol(modelData)
+                                }
+                            }
+
+                            ShellButton {
+                                id: noteUndoButton
+                                Layout.preferredWidth: 22
+                                implicitWidth: 22
+                                implicitHeight: 23
+                                font.pixelSize: 14
+                                focusPolicy: Qt.NoFocus
+                                text: "↶"
+                                opacity: 1
+                                enabled: noteItemCard.noteControlsVisible && noteEditor.activeFocus &&
+                                    noteEditor.text !== noteItemCard.initialText
+                                background: Rectangle {
+                                    radius: root.cornerRadius
+                                    color: Qt.darker(noteItemCard.modelData.color,
+                                        !noteItemCard.noteControlsVisible ||
+                                            noteEditor.text === noteItemCard.initialText ? 1.35
+                                            : (noteUndoButton.hovered ? 1.9 : 1.6))
+                                    border.width: 0
+                                }
+                                contentItem: Text {
+                                    text: noteUndoButton.text
+                                    color: !noteItemCard.noteControlsVisible ||
+                                        noteEditor.text === noteItemCard.initialText ? "transparent" :
+                                        (noteUndoButton.enabled
+                                            ? Qt.lighter(noteItemCard.modelData.color, 1.7) : "#657188")
+                                    font: noteUndoButton.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    noteEditor.forceActiveFocus()
+                                    if (noteEditor.canUndo) noteEditor.undo()
+                                    else noteEditor.text = noteItemCard.initialText
                                 }
                             }
 
