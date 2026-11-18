@@ -44,6 +44,51 @@ PanelWindow {
     property var contextMenuWindow: null
     property real contextMenuX: 0
     property real contextMenuY: 0
+    property bool controlsPointerFollowPending: false
+
+    Timer {
+        id: switcherControlsPointerTimer
+        interval: 80
+        repeat: false
+        onTriggered: {
+            if (!switcherWindow.visible || !switcherControlsMouse.visible) return
+            var point = switcherControlsMouse.mapToGlobal(
+                switcherControlsMouse.width / 2,
+                switcherControlsMouse.height / 2
+            )
+            Quickshell.execDetached([
+                "hyprctl", "eval",
+                "hl.dispatch(hl.dsp.cursor.move({ x = " + Math.round(point.x)
+                    + ", y = " + Math.round(point.y) + " }))"
+            ])
+            switcherHoverResetTimer.restart()
+        }
+    }
+
+    Timer {
+        id: switcherHoverResetTimer
+        interval: 80
+        repeat: false
+        onTriggered: {
+            if (!switcherWindow.visible || !switcherWindow.service.open) return
+            switcherWindow.controlsPointerFollowPending = false
+            // The pointer was just moved to the toggle's new center. Trust
+            // that target instead of the hover state sampled during relayout.
+            switcherWindow.service.appSwitcherHovered = true
+            switcherWindow.service.appSwitcherClosePending = false
+            switcherLeaveTimer.stop()
+        }
+    }
+
+    function toggleSwitcherSystemControls() {
+        switcherLeaveTimer.stop()
+        switcherHoverResetTimer.stop()
+        controlsPointerFollowPending = true
+        service.appSwitcherHovered = false
+        service.appSwitcherClosePending = false
+        service.showSwitcherSystemControls = !service.showSwitcherSystemControls
+        switcherControlsPointerTimer.restart()
+    }
 
     function pinnedAppMatchesWindow(appId, win) {
         var target = switcherWindow.service.normalizedDesktopEntryId(appId).toLowerCase()
@@ -1296,6 +1341,7 @@ RowLayout {
         HoverHandler {
             id: containerHoverHandler
             onHoveredChanged: {
+                if (switcherWindow.controlsPointerFollowPending) return
                 if (hovered) {
                     switcherLeaveTimer.stop()
                     switcherWindow.service.appSwitcherHovered = true
@@ -1637,11 +1683,13 @@ RowLayout {
                     border.width: 1
 
                     Text {
-                        anchors.centerIn: parent
-                        text: switcherWindow.service.showSwitcherSystemControls ? "⭳" : "🢕"
+                        anchors.fill: parent
+                        text: switcherWindow.service.showSwitcherSystemControls ? "⌄" : "⌃"
                         color: switcherControlsMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 12
+                        font.pixelSize: 18
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
 
                     MouseArea {
@@ -1649,8 +1697,7 @@ RowLayout {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.showSwitcherSystemControls =
-                            !switcherWindow.service.showSwitcherSystemControls
+                        onClicked: switcherWindow.toggleSwitcherSystemControls()
                     }
                 }
 
