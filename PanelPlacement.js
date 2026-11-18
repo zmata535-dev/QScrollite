@@ -1,5 +1,9 @@
 .pragma library
 
+function switcherActive(service) {
+    return !!service && (!!service.open || !!service.appSwitcherHovered)
+}
+
 function focusedWindowIsLeft(service, screenX, screenWidth) {
     if (!service || service.activeCompositor !== "hyprland") return false
     var activeId = String(service.activeWindowId || "")

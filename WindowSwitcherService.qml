@@ -35,6 +35,8 @@ QtObject {
     property bool appMenuPending: false
     property string appMenuInitialText: ""
     property bool gDictCalcOpen: false
+    property string raisedCardModule: ""
+    property real calendarGroupTargetX: 12
     property string gDictCalcInitialQuery: ""
     property bool qSysMonOpen: false
     property bool qNoteOpen: false
@@ -44,10 +46,12 @@ QtObject {
     property alias qNoteInitialized: qNoteStore.initialized
     property bool qNoteStorageReady: false
     property bool clipboardOpen: false
-    property var clipboardHistory: []
+    property alias clipboardHistory: clipboardHistoryStore.history
+    property bool clipboardStorageReady: false
     property bool calendarOpen: false
     property bool calendarPending: false
     property bool clockOpen: false
+    property bool clockOpenAllowedDuringPlayback: false
     property bool compactClockOpen: false
     property var clockNow: new Date()
     property bool clockColonVisible: true
@@ -101,6 +105,16 @@ QtObject {
     property alias clockShatterAnimationEnabled: idleSettings.clockShatterAnimationEnabled
     property alias clockSlideAnimationEnabled: idleSettings.clockSlideAnimationEnabled
     property alias showRssUsage: idleSettings.showRssUsage
+    property alias showSwitcherSystemControls: switcherUiSettings.showSystemControls
+    onShowSwitcherSystemControlsChanged: {
+        if (showSwitcherSystemControls && open) {
+            refreshNetwork()
+            if (!brightnessReadProcess.running) brightnessReadProcess.running = true
+            refreshBluetooth()
+        } else if (!showSwitcherSystemControls && networkReadProcess.running) {
+            networkReadProcess.running = false
+        }
+    }
     property alias topAppSwitcherEnabled: idleSettings.topAppSwitcherEnabled
     property alias bottomAppSwitcherEnabled: idleSettings.bottomAppSwitcherEnabled
     property alias emptyWorkspaceAction: idleSettings.emptyWorkspaceAction
@@ -191,6 +205,20 @@ QtObject {
         }
     }
 
+    property var switcherUiSettingsFile: FileView {
+        id: switcherUiSettingsFile
+        path: (Quickshell.env("HOME") || "") + "/.config/quickshell/switcher-ui.json"
+        onAdapterUpdated: writeAdapter()
+        onSaveFailed: function(error) {
+            console.warn("[AppSwitcher] UI settings save failed:", error)
+        }
+
+        JsonAdapter {
+            id: switcherUiSettings
+            property bool showSystemControls: true
+        }
+    }
+
     property var pinnedAppsFile: FileView {
         id: pinnedAppsFile
         path: (Quickshell.env("HOME") || "") + "/.config/quickshell/pinned-apps.json"
@@ -227,6 +255,30 @@ QtObject {
             property int currentIndex: 0
             property string noteText: ""
             property bool initialized: false
+        }
+    }
+
+    property var clipboardHistoryFile: FileView {
+        id: clipboardHistoryFile
+        path: (Quickshell.env("HOME") || "") + "/.config/quickshell/clipboard-history.json"
+        blockWrites: true
+        onLoaded: {
+            service.clipboardStorageReady = true
+            service.rememberClipboardText(Quickshell.clipboardText)
+        }
+        onLoadFailed: function(error) {
+            console.warn("[Clipboard] History load failed:", error)
+            service.clipboardStorageReady = true
+            service.rememberClipboardText(Quickshell.clipboardText)
+        }
+        onAdapterUpdated: {
+            if (service.clipboardStorageReady) writeAdapter()
+        }
+        onSaveFailed: function(error) { console.warn("[Clipboard] History save failed:", error) }
+
+        JsonAdapter {
+            id: clipboardHistoryStore
+            property var history: []
         }
     }
 
@@ -598,7 +650,7 @@ QtObject {
             return;
 
         if (emptyWorkspaceAction === "clock")
-            openClock();
+            openClock(true);
         else if (emptyWorkspaceAction === "switcher")
             openSwitcher("bottom-center");
         else if (emptyWorkspaceAction === "calendar")
@@ -643,7 +695,7 @@ QtObject {
         }
     }
 
-    // All visible clock surfaces share one time update and two-second blink.
+    // All visible clock surfaces share one-second time updates and separator blink.
     property var clockTimer: Timer {
         interval: 1000
         repeat: true
@@ -651,8 +703,7 @@ QtObject {
         onTriggered: {
             service.clockNow = new Date()
             service.clockTickCount++
-            if (service.clockTickCount % 2 === 0)
-                service.clockColonVisible = !service.clockColonVisible
+            service.clockColonVisible = !service.clockColonVisible
         }
     }
 
@@ -737,7 +788,7 @@ QtObject {
     property var networkRefreshTimer: Timer {
         interval: 5000
         repeat: true
-        running: service.open
+        running: service.open && service.showSwitcherSystemControls
         onTriggered: service.refreshNetwork()
     }
 
@@ -917,7 +968,11 @@ QtObject {
         workspaces = [];
         activeWindowId = "";
         refresh();
-        refreshNetwork();
+        if (showSwitcherSystemControls) {
+            refreshNetwork();
+            if (!brightnessReadProcess.running) brightnessReadProcess.running = true;
+            refreshBluetooth();
+        }
         open = true;
     }
 
@@ -1407,8 +1462,11 @@ QtObject {
         interval: 500
         repeat: false
         onTriggered: {
-            if (service.compactClockOnMediaPlaying && service.hasPlayingMedia())
+            if (service.compactClockOnMediaPlaying && service.hasPlayingMedia() &&
+                    !service.clockOpenAllowedDuringPlayback) {
+                service.clockOpenAllowedDuringPlayback = false
                 return;
+            }
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
             if (service.compactClockOpen || service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen || service.qSysMonOpen ||
                     service.calendarOpen || service.calendarPending || service.idleConfigOpen ||
@@ -1419,6 +1477,7 @@ QtObject {
             service.clockCloseRequested = false;
             service.clockSlideCloseRequested = false;
             service.clockOpen = true;
+            service.clockOpenAllowedDuringPlayback = false;
         }
     }
 
@@ -1445,6 +1504,7 @@ QtObject {
 
     function openCalendar() {
         closeSwitcher();
+        raiseCardModule("calendar");
         var clockWasVisible = clockOpen || compactClockOpen;
         suspendClocksForCalendar();
         calendarPending = true;
@@ -1471,6 +1531,7 @@ QtObject {
     function openCalendarFromCompactClock() {
         suspendClocksForCalendar();
         closeSwitcher();
+        raiseCardModule("calendar");
         calendarPending = true;
         if (unreadNotificationCount > 0 && notificationService)
             notificationService.openCenter();
@@ -1478,9 +1539,10 @@ QtObject {
         compactClockCalendarTimer.restart();
     }
 
-    function openClock() {
+    function openClock(allowDuringPlayback) {
         if (!clockCardEnabled) return;
-        if (compactClockOnMediaPlaying && hasPlayingMedia()) return;
+        if (compactClockOnMediaPlaying && hasPlayingMedia() && allowDuringPlayback !== true) return;
+        clockOpenAllowedDuringPlayback = allowDuringPlayback === true;
         compactClockOpenTimer.stop();
         compactClockPending = false;
         closeCompactClock(true);
@@ -1706,6 +1768,7 @@ QtObject {
     function openGDictCalc(query) {
         cancelCompactClockForAppPanels();
         closeSwitcher(true);
+        raiseCardModule("gdictcalc");
         gDictCalcInitialQuery = String(query || "");
         appMenuTimer.stop();
         appMenuPending = false;
@@ -1713,35 +1776,17 @@ QtObject {
         gDictCalcOpen = true;
     }
 
+    function raiseCardModule(moduleName) {
+        raisedCardModule = String(moduleName || "")
+    }
+
     function openQSysMon() {
-        cancelCompactClockForAppPanels();
-        closeSwitcher(true);
-        appMenuTimer.stop();
-        appMenuPending = false;
-        appMenuOpen = false;
-        gDictCalcOpen = false;
-        closeCalendar();
-        clockOpenTimer.stop();
-        if (clockOpen) requestClockClose();
-        idleConfigOpen = false;
-        if (wallpaperService) wallpaperService.closeSelector();
+        raiseCardModule("sysmon");
         qSysMonOpen = true;
     }
 
     function openQNote() {
-        cancelCompactClockForAppPanels();
-        closeSwitcher(true);
-        appMenuTimer.stop();
-        appMenuPending = false;
-        appMenuOpen = false;
-        gDictCalcOpen = false;
-        qSysMonOpen = false;
-        clipboardOpen = false;
-        closeCalendar();
-        clockOpenTimer.stop();
-        if (clockOpen) requestClockClose();
-        idleConfigOpen = false;
-        if (wallpaperService) wallpaperService.closeSelector();
+        raiseCardModule("qnote");
         qNoteOpen = true;
     }
 
@@ -1781,12 +1826,11 @@ QtObject {
 
     function clearClipboardHistory() {
         clipboardHistory = [];
+        if (clipboardStorageReady) clipboardHistoryFile.writeAdapter();
     }
 
     Component.onCompleted: {
         detectCompositor();
         refresh();
-        refreshBluetooth();
-        brightnessReadProcess.running = true;
     }
 }

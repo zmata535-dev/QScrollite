@@ -13,7 +13,7 @@ PanelWindow {
     visible: service.bluetoothOpen
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "bluetooth" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "qscrollite-bluetooth-manager"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     property real cardX: -600
@@ -30,6 +30,16 @@ PanelWindow {
         slideIn.restart()
     }
 
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!root.visible || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
     NumberAnimation {
         id: slideIn
         target: root
@@ -42,18 +52,18 @@ PanelWindow {
     Connections {
         target: root.service
         function onActiveWindowIdChanged() {
-            if (!root.visible) return
-            Qt.callLater(function() {
-                if (!root.visible) return
-                root.positionOppositeFocusedWindow()
-                slideIn.stop()
-                slideIn.to = root.openTargetX
-                slideIn.restart()
-            })
+            root.repositionAfterSwitcher()
+        }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!root.service.appSwitcherHovered) root.repositionAfterSwitcher()
         }
     }
 
-    Component.onCompleted: openFromOppositeSide()
+    Component.onCompleted: {
+        service.raiseCardModule("bluetooth")
+        openFromOppositeSide()
+    }
 
     Item {
         anchors.fill: parent

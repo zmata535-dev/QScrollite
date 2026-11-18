@@ -35,6 +35,7 @@ PanelWindow {
 
     property var now: service.clockNow
     property int processRssKiB: 0
+    property real appsScrollX: 0
     property string focusAtOpen: ""
     property string pendingIconFocusWindowId: ""
     property string pendingIconLaunchAppId: ""
@@ -250,10 +251,20 @@ PanelWindow {
         if (!focusedIconScrollPending) return
         Qt.callLater(function() {
             if (!switcherWindow.visible || !iconItem) return
-            var point = iconItem.mapToItem(appsFlickable.contentItem, iconItem.width / 2, iconItem.height / 2)
-            appsFlickable.contentX = Math.max(0, Math.min(
-                appsFlickable.contentWidth - appsFlickable.width,
-                point.x - appsFlickable.width / 2
+            var strip = switcherWindow.service.showSwitcherSystemControls
+                ? fullAppsStripLoader.item : compactAppsStripLoader.item
+            if (!strip || !strip.flickableRef) return
+            var flickable = strip.flickableRef
+            var iconPosition = iconItem.mapToItem(flickable.contentItem, 0, 0)
+            var nextX = flickable.contentX
+            if (iconPosition.x < flickable.contentX)
+                nextX = iconPosition.x
+            else if (iconPosition.x + iconItem.width > flickable.contentX + flickable.width)
+                nextX = iconPosition.x + iconItem.width - flickable.width
+
+            flickable.contentX = Math.max(0, Math.min(
+                flickable.contentWidth - flickable.width,
+                nextX
             ))
             switcherWindow.focusedIconScrollPending = false
         })
@@ -261,6 +272,7 @@ PanelWindow {
 
     LazyLoader {
         active: switcherWindow.visible && switcherWindow.service.showRssUsage
+            && switcherWindow.service.showSwitcherSystemControls
 
         Item {
             Process {
@@ -347,436 +359,29 @@ PanelWindow {
     // Floating Switcher Bar anchored near top-left
     GlowBorder { targetItem: container; cornerRadius: container.radius }
 
-    Rectangle {
-        id: container
-        x: switcherWindow.service.switcherPlacement === "bottom-center"
-            ? (switcherWindow.width - width) / 2 : 0
-        y: switcherWindow.service.switcherPlacement === "bottom-center"
-            ? switcherWindow.height - height : 0
-
-        width: Math.min(switcherWindow.width - 32, Math.max(500, mainCol.implicitWidth + 16)) * 0.9 + 17
-        height: mainCol.implicitHeight + 14
-
-        color: "#111722"
-        radius: 14
-        border.color: "#3b4a63"
-        border.width: 1
-
-        // Prevent background clicks through the panel
-        MouseArea {
-            anchors.fill: parent
-            onClicked: {}
-        }
-
-        HoverHandler {
-            id: containerHoverHandler
-            onHoveredChanged: {
-                if (hovered) {
-                    switcherLeaveTimer.stop()
-                    switcherWindow.service.appSwitcherHovered = true
-                } else {
-                    switcherLeaveTimer.restart()
-                }
-            }
-        }
-
-        TapHandler {
-            acceptedButtons: Qt.RightButton
-            onTapped: switcherWindow.service.openGDictCalc("")
-        }
-
-        ColumnLayout {
-            id: mainCol
-            anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-                topMargin: 7
-                leftMargin: 9
-                rightMargin: 9
-            }
-            spacing: 5
-
-            // Header Row (Clock, Date, Compositor Chip, Preview Toggle, Close)
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 7
-
-                // Two-line Clock and Date
-                Item {
-                    implicitWidth: clockDisplay.implicitWidth
-                    implicitHeight: clockDisplay.implicitHeight
-
-                    ColumnLayout {
-                        id: clockDisplay
-                        spacing: 1
-
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "HH:mm")
-                            color: "#f1f5f9"
-                            font.pixelSize: 18}
-
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "dddd, dd MMM yy")
-                            color: "#94a3b8"
-                            font.pixelSize: 10
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.openCalendar()
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Compositor Chip
-                Rectangle {
-                    radius: 11
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#354765" }
-                        GradientStop { position: 0.48; color: "#263650" }
-                        GradientStop { position: 1.0; color: "#19263b" }
-                    }
-                    border.width: 0
-                    implicitWidth: 22
-                    implicitHeight: 22
-
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.topMargin: 2
-                        anchors.leftMargin: 5
-                        anchors.rightMargin: 5
-                        height: 1
-                        radius: 1
-                        color: "#b5e4f2"
-                        opacity: 0.3
-                    }
-
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: compText
-                        anchors.centerIn: parent
-                        text: ""
-                        color: "#e3f8ff"
-                        font.pixelSize: 15}
-                }
-
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: gDictCalcHeaderMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: gDictCalcHeaderMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "?"
-                        color: gDictCalcHeaderMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 15
-                    }
-
-                    MouseArea {
-                        id: gDictCalcHeaderMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.openGDictCalc("")
-                    }
-                }
-
-                RowLayout {
-                    visible: switcherWindow.hasFocusedApp
-                    spacing: 4
-
-                    Repeater {
-                        model: [
-                            { value: switcherWindow.service.columnWidthSmall, name: "Narrow", glyphWidth: 5 },
-                            { value: switcherWindow.service.columnWidthMedium, name: "Normal", glyphWidth: 10 },
-                            { value: switcherWindow.service.columnWidthLarge, name: "Wide", glyphWidth: 15 }
-                        ]
-
-                        delegate: Rectangle {
-                            required property var modelData
-                            implicitWidth: 22
-                            implicitHeight: 22
-                            radius: 6
-                            color: widthButtonMouse.containsMouse ? "#273650" : "#161d2a"
-                            border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                            border.width: 1
-
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: modelData.glyphWidth
-                                height: 11
-                                radius: 1
-                                color: "transparent"
-                                border.width: 1
-                                border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#a5b4c8"
-                            }
-
-                            MouseArea {
-                                id: widthButtonMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: switcherWindow.setFocusedColumnWidth(modelData.value)
-                            }
-
-                        }
-                    }
-                }
-
-                // Fullscreen control follows the column-width presets.
-                Rectangle {
-                    visible: switcherWindow.hasFocusedApp
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: fullscreenFocusedMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
-                        text: "⛶"
-                        color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.pixelSize: 18
-                    }
-
-                    MouseArea {
-                        id: fullscreenFocusedMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.toggleFocusedFullscreen()
-                    }
-
-                }
-
-                // Audio mixer
-                Rectangle {
-                    Layout.leftMargin: 9
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: volumeMouse.containsMouse ? "#273650"
-                        : (switcherWindow.service.volumeMuted ? "#32191f"
-                            : (switcherWindow.service.volumePercent >= 100 ? "#343124" : "#161d2a"))
-                    border.color: volumeMouse.containsMouse ? "#abc7ff"
-                        : (switcherWindow.service.volumeMuted ? "#8f3544"
-                            : (switcherWindow.service.volumePercent >= 100 ? "#d8c36f" : "#2b364a"))
-                    border.width: 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: switcherWindow.service.volumeMuted ? "󰝟" : "󰕾"
-                        color: volumeMouse.containsMouse ? "#abc7ff"
-                            : (switcherWindow.service.volumeMuted ? "#a94753"
-                                : (switcherWindow.service.volumePercent >= 100 ? "#f0dd89" : "#8092ab"))
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 18
-                    }
-                    MouseArea {
-                        id: volumeMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.RightButton)
-                                switcherWindow.service.toggleVolumeMute()
-                            else
-                                switcherWindow.service.openVolumeControl()
-                        }
-                        onWheel: function(event) {
-                            switcherWindow.service.adjustVolume(event.angleDelta.y > 0 ? 1 : -1)
-                            event.accepted = true
-                        }
-                    }
-                }
-
-                // Backlight control follows volume.
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: brightnessMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: brightnessMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: "󰛨"
-                        color: brightnessMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 15
-                    }
-                    MouseArea {
-                        id: brightnessMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: switcherWindow.service.showBrightnessOsd()
-                        onWheel: function(event) {
-                            switcherWindow.service.adjustBrightness(event.angleDelta.y > 0 ? 1 : -1)
-                            event.accepted = true
-                        }
-                    }
-                }
-
-                // Bluetooth power toggle
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: bluetoothMouse.containsMouse ? "#273650"
-                        : (switcherWindow.service.bluetoothConnected ? "#1c2a42" : "#161d2a")
-                    border.color: bluetoothMouse.containsMouse ? "#abc7ff"
-                        : (switcherWindow.service.bluetoothConnected ? "#5476a4" : "#2b364a")
-                    border.width: 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: switcherWindow.service.bluetoothPowered ? "󰂯" : "󰂲"
-                        color: bluetoothMouse.containsMouse ? "#abc7ff"
-                            : (switcherWindow.service.bluetoothConnected ? "#abc7ff" : "#8092ab")
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 12
-                    }
-                    MouseArea {
-                        id: bluetoothMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.RightButton)
-                                switcherWindow.service.toggleBluetooth()
-                            else
-                                switcherWindow.service.manageBluetooth()
-                        }
-                    }
-                }
-
-                // Network status indicator
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: networkMouse.containsMouse ? "#273650"
-                        : (switcherWindow.service.networkConnected ? "#1c2a42" : "#161d2a")
-                    border.color: networkMouse.containsMouse ? "#abc7ff"
-                        : (switcherWindow.service.networkConnected ? "#5476a4" : "#2b364a")
-                    border.width: 1
-                    Text {
-                        anchors.centerIn: parent
-                        text: switcherWindow.service.networkConnected ? "󰖩" : "󰖪"
-                        color: networkMouse.containsMouse ? "#abc7ff"
-                            : (switcherWindow.service.networkConnected ? "#abc7ff" : "#8092ab")
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 15
-                    }
-                    MouseArea {
-                        id: networkMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.NoButton
-                    }
-                }
-
-                Rectangle {
-                    implicitWidth: 22
-                    implicitHeight: 22
-                    radius: 6
-                    color: dndMouse.containsMouse ? "#273650" : (switcherWindow.service.doNotDisturb ? "#3a2935" : "#161d2a")
-                    border.color: switcherWindow.service.doNotDisturb ? "#ef8295" : (dndMouse.containsMouse ? "#abc7ff" : "#2b364a")
-                    border.width: 1
-
-                    Text {
-                        id: dndLabel
-                        anchors.centerIn: parent
-                        text: switcherWindow.service.doNotDisturb ? "󰂛" : "󰂚"
-                        color: switcherWindow.service.doNotDisturb ? "#ef8295" : (dndMouse.containsMouse ? "#abc7ff" : "#8092ab")
-                        font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 15
-                    }
-
-                    MouseArea {
-                        id: dndMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function(mouse) {
-                            if (mouse.button === Qt.LeftButton)
-                                switcherWindow.service.notificationService.openCenter()
-                            else
-                                switcherWindow.service.notificationService.toggleDnd()
-                        }
-                    }
-
-                    Rectangle {
-                        id: unreadBadge
-                        visible: switcherWindow.service.unreadNotificationCount > 0
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.topMargin: -5
-                        anchors.rightMargin: -5
-                        z: 2
-                        implicitWidth: unreadCountText.implicitWidth + 8
-                        implicitHeight: 14
-                        radius: 7
-                        color: "#e34f68"
-                        border.color: "#111722"
-                        border.width: 1
-
-                        Text {
-                            id: unreadCountText
-                            anchors.centerIn: parent
-                            text: switcherWindow.service.unreadNotificationCount > 99
-                                ? "99+" : String(switcherWindow.service.unreadNotificationCount)
-                            color: "#ffffff"
-                            font.family: "JetBrainsMono Nerd Font Mono"
-                            font.pixelSize: 8
-                            font.bold: true
-                        }
-
-                        MouseArea {
-                            id: unreadCountMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: switcherWindow.service.notificationService.openCenter()
-                        }
-
-                    }
-                }
-
-            }
-
-            // Divider Line
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: "#1f2838"
-            }
+    Component {
+        id: appsWorkspaceStripComponent
 
             // Main Horizontal Apps & Workspaces Strip
             Item {
+                id: mainAppsStrip
+                property var stripContainerRef: appsStripContainer
+                property var flickableRef: appsFlickable
                 Layout.fillWidth: true
-                implicitHeight: 54
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: switcherWindow.service.showSwitcherSystemControls ? -1 : 360
+                implicitHeight: switcherWindow.service.showSwitcherSystemControls ? 54 : 46
 
                 Rectangle {
                     anchors.fill: parent
                     radius: 8
                     color: "#070b12"
-                    border.color: "#101824"
-                    border.width: 1
+                    border.width: 0
                 }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 4
+                anchors.margins: switcherWindow.service.showSwitcherSystemControls ? 4 : 2
                 spacing: 6
 
                 // Keep the launcher fixed while the window and pinned app
@@ -837,7 +442,7 @@ PanelWindow {
                     id: appsStripContainer
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    Layout.preferredHeight: 46
+                    Layout.preferredHeight: switcherWindow.service.showSwitcherSystemControls ? 46 : 42
                     radius: 8
                     color: "transparent"
                     border.width: 0
@@ -847,11 +452,12 @@ PanelWindow {
                 anchors.fill: parent
                 anchors.leftMargin: 1
                 anchors.rightMargin: 1
-                contentWidth: appsRow.childrenRect.width
-                contentHeight: 46
+                contentWidth: appsRow.childrenRect.width + 10
+                contentHeight: appsStripContainer.height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-
+                Component.onCompleted: contentX = switcherWindow.appsScrollX
+                onContentXChanged: switcherWindow.appsScrollX = contentX
                 // Let a mouse wheel scroll the long strip horizontally too.
                 MouseArea {
                     anchors.fill: parent
@@ -873,6 +479,8 @@ PanelWindow {
                 Row {
                     id: appsRow
                     spacing: 6
+                    anchors.left: parent.left
+                    anchors.leftMargin: 5
                     anchors.verticalCenter: parent.verticalCenter
 
                     // Show pinned apps that are not currently running.
@@ -887,7 +495,7 @@ PanelWindow {
                             height: 32
                             anchors.verticalCenter: parent.verticalCenter
                             radius: 9
-                            color: pinnedAppHover.hovered ? "#202a3a" : "#070b12"
+                            color: "#070b12"
                             border.width: 0
                             opacity: pinnedDragHandler.active ? 0.55 : 1
 
@@ -896,6 +504,15 @@ PanelWindow {
                             Drag.keys: ["qscrollite-pinned-app"]
                             Drag.hotSpot.x: width / 2
                             Drag.hotSpot.y: height / 2
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: parent.width + 4
+                                height: parent.height + 4
+                                radius: 10
+                                color: "#202a3a"
+                                visible: pinnedAppHover.hovered
+                            }
 
                             Image {
                                 id: pinnedAppIcon
@@ -1050,8 +667,8 @@ PanelWindow {
                                         Rectangle {
                                             id: appCard
                                             readonly property var appWindowData: modelData
-                                            width: modelData.focused ? 36 : 32
-                                            height: modelData.focused ? 36 : 32
+                                            width: 32
+                                            height: 32
                                             radius: 9
                                             opacity: appDragHandler.active ? 0.55 : 1
 
@@ -1061,9 +678,18 @@ PanelWindow {
                                             Drag.hotSpot.x: width / 2
                                             Drag.hotSpot.y: height / 2
 
-                                            color: modelData.focused ? "#2c4568" : (appHover.hovered ? "#202a3a" : "#070b12")
+                                            color: modelData.focused ? "#792c5568" : "#070b12"
                                             border.color: container.border.color
                                             border.width: modelData.focused ? 1 : 0
+
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: parent.width + 4
+                                                height: parent.height + 4
+                                                radius: 10
+                                                color: "#202a3a"
+                                                visible: appHover.hovered && !modelData.focused
+                                            }
 
                                             Component.onCompleted: {
                                                 if (modelData.focused) switcherWindow.scrollToFocusedIcon(appCard)
@@ -1125,10 +751,6 @@ PanelWindow {
                                             TapHandler {
                                                 acceptedButtons: Qt.RightButton | Qt.MiddleButton
                                                 onTapped: function(eventPoint, button) {
-                                                    if (button === Qt.RightButton) {
-                                                        switcherWindow.service.openGDictCalc("")
-                                                        return
-                                                    }
                                                     var menuPoint = appCard.mapToItem(
                                                         switcherWindow.contentItem,
                                                         eventPoint.position.x,
@@ -1194,6 +816,8 @@ PanelWindow {
 
                                         }
                                     }
+
+
                                 }
                             }
                         }
@@ -1209,17 +833,181 @@ PanelWindow {
                     }
                 }
             }
+
+                Rectangle {
+                    z: 3
+                    anchors.left: parent.left
+                    anchors.leftMargin: 1
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 32
+                    height: parent.height
+                    visible: appsFlickable.contentWidth > appsFlickable.width + 1
+                        && !appsFlickable.atXBeginning
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "#cc070b12" }
+                        GradientStop { position: 1.0; color: "#00070b12" }
+                    }
+                }
+
+                Rectangle {
+                    z: 3
+                    anchors.right: parent.right
+                    anchors.rightMargin: 1
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 32
+                    height: parent.height
+                    visible: appsFlickable.contentWidth > appsFlickable.width + 1
+                        && !appsFlickable.atXEnd
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "#00070b12" }
+                        GradientStop { position: 1.0; color: "#cc070b12" }
+                    }
+                }
                 }
             }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                height: 1
-                color: "#1f2838"
-            }
+    }
 
-            RowLayout {
+    Component {
+        id: compositorIndicatorComponent
+
+Rectangle {
+                    radius: 11
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#354765" }
+                        GradientStop { position: 0.48; color: "#263650" }
+                        GradientStop { position: 1.0; color: "#19263b" }
+                    }
+                    border.width: 0
+                    implicitWidth: 22
+                    implicitHeight: 22
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.topMargin: 2
+                        anchors.leftMargin: 5
+                        anchors.rightMargin: 5
+                        height: 1
+                        radius: 1
+                        color: "#b5e4f2"
+                        opacity: 0.3
+                    }
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: compText
+                        anchors.centerIn: parent
+                        text: ""
+                        color: "#e3f8ff"
+                        font.pixelSize: 15}
+                }
+    }
+
+    Component {
+        id: brightnessIndicatorComponent
+
+Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: brightnessMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: brightnessMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰛨"
+                        color: brightnessMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+                    MouseArea {
+                        id: brightnessMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.showBrightnessOsd()
+                        onWheel: function(event) {
+                            switcherWindow.service.adjustBrightness(event.angleDelta.y > 0 ? 1 : -1)
+                            event.accepted = true
+                        }
+                    }
+                }
+    }
+
+    Component {
+        id: bluetoothIndicatorComponent
+
+Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: bluetoothMouse.containsMouse ? "#273650"
+                        : (switcherWindow.service.bluetoothConnected ? "#1c2a42" : "#161d2a")
+                    border.color: bluetoothMouse.containsMouse ? "#abc7ff"
+                        : (switcherWindow.service.bluetoothConnected ? "#5476a4" : "#2b364a")
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.bluetoothPowered ? "󰂯" : "󰂲"
+                        color: bluetoothMouse.containsMouse ? "#abc7ff"
+                            : (switcherWindow.service.bluetoothConnected ? "#abc7ff" : "#8092ab")
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        id: bluetoothMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton)
+                                switcherWindow.service.toggleBluetooth()
+                            else
+                                switcherWindow.service.manageBluetooth()
+                        }
+                    }
+                }
+    }
+
+    Component {
+        id: networkIndicatorComponent
+
+Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: networkMouse.containsMouse ? "#273650"
+                        : (switcherWindow.service.networkConnected ? "#1c2a42" : "#161d2a")
+                    border.color: networkMouse.containsMouse ? "#abc7ff"
+                        : (switcherWindow.service.networkConnected ? "#5476a4" : "#2b364a")
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.networkConnected ? "󰖩" : "󰖪"
+                        color: networkMouse.containsMouse ? "#abc7ff"
+                            : (switcherWindow.service.networkConnected ? "#abc7ff" : "#8092ab")
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+                    MouseArea {
+                        id: networkMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
+                    }
+                }
+    }
+
+    Component {
+        id: bottomControlsComponent
+
+RowLayout {
+                visible: switcherWindow.service.showSwitcherSystemControls
                 Layout.fillWidth: true
                 spacing: 8
 
@@ -1417,6 +1205,486 @@ PanelWindow {
                     action: "shutdown"
                     glyph: "⏻"
                 }
+            }
+    }
+
+    Component {
+        id: switcherDateComponent
+
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "dddd, dd MMM yy")
+                            color: "#94a3b8"
+                            font.pixelSize: 10
+                        }
+    }
+
+    Component {
+        id: optionalControlsDividerComponent
+        Rectangle {
+            implicitHeight: 1
+            color: "#1f2838"
+        }
+    }
+
+    Component {
+        id: optionalControlsSpacerComponent
+        Item {}
+    }
+
+    Component {
+        id: compactSettingsButtonComponent
+        Rectangle {
+            implicitWidth: 22
+            implicitHeight: 22
+            radius: 6
+            color: hiddenSettingsMouse.containsMouse ? "#273650" : "#161d2a"
+            border.color: hiddenSettingsMouse.containsMouse ? "#abc7ff" : "#2b364a"
+            border.width: 1
+
+            Text {
+                anchors.fill: parent
+                text: "󰒓"
+                color: hiddenSettingsMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                font.family: "JetBrainsMono Nerd Font Mono"
+                font.pixelSize: 20
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            MouseArea {
+                id: hiddenSettingsMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: switcherWindow.service.openIdleConfig()
+            }
+        }
+    }
+
+    Component {
+        id: compactShutdownButtonComponent
+        SystemActionButton {
+            service: switcherWindow.service
+            action: "shutdown"
+            glyph: "⏻"
+        }
+    }
+
+    Rectangle {
+        id: container
+        x: switcherWindow.service.switcherPlacement === "bottom-center"
+            ? (switcherWindow.width - width) / 2 : 0
+        y: switcherWindow.service.switcherPlacement === "bottom-center"
+            ? switcherWindow.height - height : 0
+
+        width: Math.min(switcherWindow.width - 32, Math.max(
+            550,
+            Math.min(switcherWindow.width - 32, Math.max(500, mainCol.implicitWidth + 16)) * 0.9 + 17
+        ))
+        height: mainCol.implicitHeight + 14
+
+        color: "#111722"
+        radius: 14
+        border.color: "#3b4a63"
+        border.width: 1
+
+        // Prevent background clicks through the panel
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {}
+        }
+
+        HoverHandler {
+            id: containerHoverHandler
+            onHoveredChanged: {
+                if (hovered) {
+                    switcherLeaveTimer.stop()
+                    switcherWindow.service.appSwitcherHovered = true
+                } else {
+                    switcherLeaveTimer.restart()
+                }
+            }
+        }
+
+        ColumnLayout {
+            id: mainCol
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                topMargin: 7
+                leftMargin: 9
+                rightMargin: 9
+            }
+            spacing: 5
+
+            // Header Row (Clock, Date, Compositor Chip, Preview Toggle, Close)
+            RowLayout {
+                id: headerRow
+                Layout.fillWidth: true
+                spacing: 7
+
+                // Two-line Clock and Date
+                Item {
+                    implicitWidth: clockDisplay.implicitWidth
+                    implicitHeight: clockDisplay.implicitHeight
+
+                    ColumnLayout {
+                        id: clockDisplay
+                        spacing: 1
+
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "HH:mm")
+                            color: "#f1f5f9"
+                            font.pixelSize: 18}
+
+                        Loader {
+                            active: switcherWindow.service.showSwitcherSystemControls
+                            visible: switcherWindow.service.showSwitcherSystemControls
+                            sourceComponent: switcherDateComponent
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.openCalendar()
+                    }
+                }
+
+                Loader {
+                    active: !switcherWindow.service.showSwitcherSystemControls
+                    visible: !switcherWindow.service.showSwitcherSystemControls
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    sourceComponent: nextWorkspaceButtonComponent
+                }
+
+                Loader {
+                    active: !switcherWindow.service.showSwitcherSystemControls
+                    visible: !switcherWindow.service.showSwitcherSystemControls
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    sourceComponent: compactSettingsButtonComponent
+                }
+
+                Loader {
+                    active: !switcherWindow.service.showSwitcherSystemControls
+                    visible: !switcherWindow.service.showSwitcherSystemControls
+                    sourceComponent: compactShutdownButtonComponent
+                }
+
+                Loader {
+                    id: compactAppsStripLoader
+                    active: !switcherWindow.service.showSwitcherSystemControls
+                    visible: !switcherWindow.service.showSwitcherSystemControls
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 80
+                    Layout.preferredWidth: 360
+                    Layout.preferredHeight: 46
+                    sourceComponent: appsWorkspaceStripComponent
+                }
+
+                Loader {
+                    active: switcherWindow.service.showSwitcherSystemControls
+                    visible: switcherWindow.service.showSwitcherSystemControls
+                    Layout.fillWidth: true
+                    sourceComponent: optionalControlsSpacerComponent
+                }
+
+                // Compositor Chip
+                Loader {
+                    active: switcherWindow.service.showSwitcherSystemControls
+                    visible: switcherWindow.service.showSwitcherSystemControls
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    sourceComponent: compositorIndicatorComponent
+                }
+
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: gDictCalcHeaderMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: gDictCalcHeaderMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "?"
+                        color: gDictCalcHeaderMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+
+                    MouseArea {
+                        id: gDictCalcHeaderMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.openGDictCalc("")
+                    }
+                }
+
+                RowLayout {
+                    visible: switcherWindow.hasFocusedApp
+                    spacing: 4
+
+                    Repeater {
+                        model: [
+                            { value: switcherWindow.service.columnWidthSmall, name: "Narrow", glyphWidth: 5 },
+                            { value: switcherWindow.service.columnWidthMedium, name: "Normal", glyphWidth: 10 },
+                            { value: switcherWindow.service.columnWidthLarge, name: "Wide", glyphWidth: 15 }
+                        ]
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            radius: 6
+                            color: widthButtonMouse.containsMouse ? "#273650" : "#161d2a"
+                            border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                            border.width: 1
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: modelData.glyphWidth
+                                height: 11
+                                radius: 1
+                                color: "transparent"
+                                border.width: 1
+                                border.color: widthButtonMouse.containsMouse ? "#abc7ff" : "#a5b4c8"
+                            }
+
+                            MouseArea {
+                                id: widthButtonMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: switcherWindow.setFocusedColumnWidth(modelData.value)
+                            }
+
+                        }
+                    }
+                }
+
+                // Fullscreen control follows the column-width presets.
+                Rectangle {
+                    visible: switcherWindow.hasFocusedApp
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: fullscreenFocusedMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
+                        text: "⛶"
+                        color: fullscreenFocusedMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.pixelSize: 18
+                    }
+
+                    MouseArea {
+                        id: fullscreenFocusedMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.toggleFocusedFullscreen()
+                    }
+
+                }
+
+                // Audio mixer
+                Rectangle {
+                    Layout.leftMargin: 9
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: volumeMouse.containsMouse ? "#273650"
+                        : (switcherWindow.service.volumeMuted ? "#32191f"
+                            : (switcherWindow.service.volumePercent >= 100 ? "#343124" : "#161d2a"))
+                    border.color: volumeMouse.containsMouse ? "#abc7ff"
+                        : (switcherWindow.service.volumeMuted ? "#8f3544"
+                            : (switcherWindow.service.volumePercent >= 100 ? "#d8c36f" : "#2b364a"))
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.volumeMuted ? "󰝟" : "󰕾"
+                        color: volumeMouse.containsMouse ? "#abc7ff"
+                            : (switcherWindow.service.volumeMuted ? "#a94753"
+                                : (switcherWindow.service.volumePercent >= 100 ? "#f0dd89" : "#8092ab"))
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 18
+                    }
+                    MouseArea {
+                        id: volumeMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton)
+                                switcherWindow.service.toggleVolumeMute()
+                            else
+                                switcherWindow.service.openVolumeControl()
+                        }
+                        onWheel: function(event) {
+                            switcherWindow.service.adjustVolume(event.angleDelta.y > 0 ? 1 : -1)
+                            event.accepted = true
+                        }
+                    }
+                }
+
+                // Backlight control follows volume.
+                Loader {
+                    active: switcherWindow.service.showSwitcherSystemControls
+                    visible: switcherWindow.service.showSwitcherSystemControls
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    sourceComponent: brightnessIndicatorComponent
+                }
+
+                // Bluetooth power toggle
+                Loader {
+                    active: switcherWindow.service.showSwitcherSystemControls
+                    visible: switcherWindow.service.showSwitcherSystemControls
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    sourceComponent: bluetoothIndicatorComponent
+                }
+
+                // Network status indicator
+                Loader {
+                    active: switcherWindow.service.showSwitcherSystemControls
+                    visible: switcherWindow.service.showSwitcherSystemControls
+                    Layout.preferredWidth: 22
+                    Layout.preferredHeight: 22
+                    sourceComponent: networkIndicatorComponent
+                }
+
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: dndMouse.containsMouse ? "#273650" : (switcherWindow.service.doNotDisturb ? "#3a2935" : "#161d2a")
+                    border.color: switcherWindow.service.doNotDisturb ? "#ef8295" : (dndMouse.containsMouse ? "#abc7ff" : "#2b364a")
+                    border.width: 1
+
+                    Text {
+                        id: dndLabel
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.doNotDisturb ? "󰂛" : "󰂚"
+                        color: switcherWindow.service.doNotDisturb ? "#ef8295" : (dndMouse.containsMouse ? "#abc7ff" : "#8092ab")
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 15
+                    }
+
+                    MouseArea {
+                        id: dndMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.LeftButton)
+                                switcherWindow.service.notificationService.openCenter()
+                            else
+                                switcherWindow.service.notificationService.toggleDnd()
+                        }
+                    }
+
+                    Rectangle {
+                        id: unreadBadge
+                        visible: switcherWindow.service.unreadNotificationCount > 0
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -5
+                        anchors.rightMargin: -5
+                        z: 2
+                        implicitWidth: unreadCountText.implicitWidth + 8
+                        implicitHeight: 14
+                        radius: 7
+                        color: "#e34f68"
+                        border.color: "#111722"
+                        border.width: 1
+
+                        Text {
+                            id: unreadCountText
+                            anchors.centerIn: parent
+                            text: switcherWindow.service.unreadNotificationCount > 99
+                                ? "99+" : String(switcherWindow.service.unreadNotificationCount)
+                            color: "#ffffff"
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.pixelSize: 8
+                            font.bold: true
+                        }
+
+                        MouseArea {
+                            id: unreadCountMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: switcherWindow.service.notificationService.openCenter()
+                        }
+
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: switcherControlsMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: switcherControlsMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.showSwitcherSystemControls ? "⭳" : "🢕"
+                        color: switcherControlsMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 12
+                    }
+
+                    MouseArea {
+                        id: switcherControlsMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.showSwitcherSystemControls =
+                            !switcherWindow.service.showSwitcherSystemControls
+                    }
+                }
+
+            }
+
+            // Divider Line
+            Loader {
+                active: switcherWindow.service.showSwitcherSystemControls
+                visible: switcherWindow.service.showSwitcherSystemControls
+                Layout.fillWidth: true
+                sourceComponent: optionalControlsDividerComponent
+            }
+
+            Loader {
+                id: fullAppsStripLoader
+                active: switcherWindow.service.showSwitcherSystemControls
+                visible: switcherWindow.service.showSwitcherSystemControls
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                sourceComponent: appsWorkspaceStripComponent
+            }
+
+            Loader {
+                active: switcherWindow.service.showSwitcherSystemControls
+                visible: switcherWindow.service.showSwitcherSystemControls
+                Layout.fillWidth: true
+                sourceComponent: optionalControlsDividerComponent
+            }
+
+            Loader {
+                active: switcherWindow.service.showSwitcherSystemControls
+                visible: switcherWindow.service.showSwitcherSystemControls
+                Layout.fillWidth: true
+                sourceComponent: bottomControlsComponent
             }
         }
     }

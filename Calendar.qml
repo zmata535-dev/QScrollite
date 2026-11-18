@@ -21,7 +21,7 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "calendar" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-calendar"
     WlrLayershell.keyboardFocus: root.otherComponentOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
 
@@ -31,9 +31,13 @@ PanelWindow {
         || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen || service.clipboardOpen
         || service.bluetoothOpen || service.idleConfigOpen || service.clockOpen || service.compactClockOpen
         || (service.wallpaperService && service.wallpaperService.selectorOpen)
-    readonly property real pairedCalendarWidth: Math.min(388, (root.width - 48) * 0.38)
+    readonly property bool otherSidePanelOpen: service.appMenuOpen || service.appMenuPending
+        || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen
+        || service.clipboardOpen || service.bluetoothOpen || service.idleConfigOpen
+        || (service.wallpaperService && service.wallpaperService.selectorOpen)
+    readonly property real pairedCalendarWidth: Math.min(340, (root.width - 48) * 0.36)
     readonly property real pairedNotificationWidth: Math.min(560, (root.width - 48) * 0.56)
-    readonly property real dayCellHeight: Math.max(12, Math.min(38, (root.height - 204) / 6))
+    readonly property real dayCellHeight: Math.max(10, Math.min(30, (root.height - 240) / 6))
     property var pairedInputRegion: Region { item: card }
     mask: pairedInputRegion
     property real cardX: -500
@@ -42,8 +46,15 @@ PanelWindow {
     function positionOppositeFocusedWindow() {
         var totalWidth = pairedWithNotifications
             ? pairedCalendarWidth + 14 + pairedNotificationWidth : card.width
-        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
+        var preferredX = PanelPlacement.oppositeTargetX(service, root.screen.x,
             root.width, totalWidth, 12)
+        if (otherSidePanelOpen) {
+            openTargetX = preferredX < root.width / 2
+                ? root.width - totalWidth - 12 : 12
+        } else {
+            openTargetX = preferredX
+        }
+        service.calendarGroupTargetX = openTargetX
     }
 
     function openFromOppositeSide() {
@@ -55,17 +66,27 @@ PanelWindow {
         slideIn.restart()
     }
 
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!root.visible || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
+    onOtherSidePanelOpenChanged: repositionAfterSwitcher()
+    onPairedWithNotificationsChanged: repositionAfterSwitcher()
+
     Connections {
         target: root.service
         function onActiveWindowIdChanged() {
-            if (!root.visible) return
-            Qt.callLater(function() {
-                if (!root.visible) return
-                root.positionOppositeFocusedWindow()
-                slideIn.stop()
-                slideIn.to = root.openTargetX
-                slideIn.restart()
-            })
+            root.repositionAfterSwitcher()
+        }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!root.service.appSwitcherHovered) root.repositionAfterSwitcher()
         }
     }
 
@@ -149,30 +170,37 @@ PanelWindow {
         Rectangle {
             id: card
             width: root.pairedWithNotifications
-                ? root.pairedCalendarWidth : Math.min(388, root.width - 32)
-            height: Math.min(calendarColumn.implicitHeight + 36, root.height - 32)
+                ? root.pairedCalendarWidth : Math.min(340, root.width - 32)
+            height: Math.min(calendarColumn.implicitHeight + 24, root.height - 32)
             x: root.cardX
             y: (root.height - height) / 2
             clip: true
-            radius: 14
+            radius: 12
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
+
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onPressedChanged: {
+                    if (pressed) root.service.raiseCardModule("calendar")
+                }
+            }
 
             ColumnLayout {
                 id: calendarColumn
                 z: 1
                 anchors.fill: parent
-                anchors.margins: 18
-                spacing: 14
+                anchors.margins: 12
+                spacing: 8
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 6
 
                     Rectangle {
-                        Layout.preferredWidth: 32
-                        Layout.preferredHeight: 32
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
                         radius: 6
                         color: previousMouse.containsMouse ? "#273650" : "#161d2a"
                         border.color: previousMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -180,7 +208,7 @@ PanelWindow {
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                             text: "‹"
                             color: previousMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                            font.pixelSize: 22
+                            font.pixelSize: 19
                         }
 
                         MouseArea {
@@ -195,13 +223,13 @@ PanelWindow {
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                         text: root.monthTitle
                         color: "#e2e8f0"
-                        font.pixelSize: 18
+                        font.pixelSize: 15
 horizontalAlignment: Text.AlignHCenter
                     }
 
                     Rectangle {
-                        Layout.preferredWidth: 32
-                        Layout.preferredHeight: 32
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
                         radius: 6
                         color: nextMouse.containsMouse ? "#273650" : "#161d2a"
                         border.color: nextMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -209,7 +237,7 @@ horizontalAlignment: Text.AlignHCenter
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                             text: "›"
                             color: nextMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                            font.pixelSize: 22
+                            font.pixelSize: 19
                         }
 
                         MouseArea {
@@ -223,11 +251,11 @@ horizontalAlignment: Text.AlignHCenter
 
                     ShellButton {
                         focusPolicy: Qt.NoFocus
-                        Layout.preferredWidth: 32
-                        Layout.preferredHeight: 32
-                        implicitWidth: 32
-                        implicitHeight: 32
-                        font.pixelSize: 17
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        font.pixelSize: 15
                         text: "×"
                         onClicked: root.closeCalendar()
                     }
@@ -237,15 +265,15 @@ horizontalAlignment: Text.AlignHCenter
                 GridLayout {
                     Layout.fillWidth: true
                     columns: 7
-                    columnSpacing: 4
-                    rowSpacing: 4
+                    columnSpacing: 2
+                    rowSpacing: 2
 
                     Repeater {
                         model: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;required property string modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 24
+                            Layout.preferredHeight: 18
                             text: modelData
                             color: "#8290a7"
                             font.pixelSize: 10
@@ -273,7 +301,7 @@ horizontalAlignment: Text.AlignHCenter
                                 text: modelData.day
                                 color: !modelData.inMonth ? "#526078"
                                     : (modelData.isSelected ? "#ffffff" : "#dce5f2")
-                                font.pixelSize: 12}
+                                font.pixelSize: 11}
 
                             MouseArea {
                                 id: dayMouse
@@ -288,13 +316,13 @@ horizontalAlignment: Text.AlignHCenter
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 5
 
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light
-                        Layout.maximumWidth: 220
+                        Layout.maximumWidth: 190
                         text: root.selectedDateLabel
                         color: "#94a3b8"
-                        font.pixelSize: 11
+                        font.pixelSize: 10
                         elide: Text.ElideRight
                     }
 
@@ -306,7 +334,7 @@ horizontalAlignment: Text.AlignHCenter
                             font.weight: Font.Light
                             text: Qt.formatDateTime(root.service.clockNow, "HH")
                             color: "#94a3b8"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                         }
 
                         Text {
@@ -314,7 +342,7 @@ horizontalAlignment: Text.AlignHCenter
                             font.weight: Font.Light
                             text: ":"
                             color: root.service.clockColonVisible ? "#94a3b8" : "#414957"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                         }
 
                         Text {
@@ -322,7 +350,7 @@ horizontalAlignment: Text.AlignHCenter
                             font.weight: Font.Light
                             text: Qt.formatDateTime(root.service.clockNow, "mm")
                             color: "#94a3b8"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                         }
                     }
 
@@ -331,8 +359,8 @@ horizontalAlignment: Text.AlignHCenter
                     }
 
                     Rectangle {
-                        implicitWidth: 54
-                        implicitHeight: 28
+                        implicitWidth: 48
+                        implicitHeight: 24
                         radius: 6
                         color: todayMouse.containsMouse ? "#273650" : "#161d2a"
                         border.color: todayMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -340,7 +368,7 @@ horizontalAlignment: Text.AlignHCenter
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
                             text: "Today"
                             color: todayMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                            font.pixelSize: 11}
+                            font.pixelSize: 10}
 
                         MouseArea {
                             id: todayMouse

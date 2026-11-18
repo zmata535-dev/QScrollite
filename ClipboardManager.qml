@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -13,9 +14,64 @@ PanelWindow {
     visible: service.clipboardOpen
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "clipboard" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-clipboard-manager"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    property real cardX: -600
+    property real openTargetX: 12
+
+    function positionOppositeFocusedWindow() {
+        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
+            root.width, card.width, 12)
+    }
+
+    function openFromOppositeSide() {
+        positionOppositeFocusedWindow()
+        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 12)
+        slideIn.to = openTargetX
+        slideIn.restart()
+    }
+
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!root.visible || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "cardX"
+        to: root.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() { root.repositionAfterSwitcher() }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!root.service.appSwitcherHovered) root.repositionAfterSwitcher()
+        }
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            service.raiseCardModule("clipboard")
+            if (!slideIn.running) openFromOppositeSide()
+        } else {
+            slideIn.stop()
+        }
+    }
+
+    Component.onCompleted: {
+        if (visible && !slideIn.running) openFromOppositeSide()
+    }
 
     function close() {
         service.clipboardOpen = false
@@ -37,7 +93,8 @@ PanelWindow {
             id: card
             width: Math.min(560, root.width - 32)
             height: Math.min(620, root.height - 64)
-            anchors.centerIn: parent
+            x: root.cardX
+            y: (parent.height - height) / 2
             radius: 14
             color: "#111722"
             border.color: "#3b4a63"

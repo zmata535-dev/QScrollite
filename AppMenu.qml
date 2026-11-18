@@ -22,7 +22,7 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "appmenu" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-app-menu"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     mask: Region {
@@ -107,6 +107,7 @@ PanelWindow {
 
     onVisibleChanged: {
         if (visible) {
+            service.raiseCardModule("appmenu")
             filterText = service.appMenuInitialText
             service.appMenuInitialText = ""
             selectedIndex = 0

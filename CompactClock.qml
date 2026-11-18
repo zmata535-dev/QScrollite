@@ -25,7 +25,7 @@ PanelWindow {
     }
 
     // Keep the compact row above the edge trigger so row controls receive input.
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "compactclock" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-compact-clock"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
@@ -249,6 +249,7 @@ PanelWindow {
         target: root.service
         function onCompactClockOpenChanged() {
             if (root.service.compactClockOpen) {
+                root.service.raiseCardModule("compactclock")
                 slideOut.stop()
                 root.slideY = -18
                 slideIn.start()

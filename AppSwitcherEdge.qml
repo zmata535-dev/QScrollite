@@ -28,12 +28,15 @@ PanelWindow {
 
     MouseArea {
         id: triggerArea
-        width: parent.width * 0.20
+        width: parent.width * 0.40
         height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         hoverEnabled: true
         acceptedButtons: Qt.NoButton
-        onEntered: edge.service.openSwitcher("bottom-center")
+        onEntered: {
+            if (edge.service.open) return
+            edge.service.openSwitcher("bottom-center")
+        }
     }
 }

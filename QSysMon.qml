@@ -15,7 +15,7 @@ PanelWindow {
     visible: service.qSysMonOpen
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "sysmon" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-qsysmon"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
@@ -34,17 +34,24 @@ PanelWindow {
         slideIn.restart()
     }
 
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!root.visible || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
     Connections {
         target: root.service
         function onActiveWindowIdChanged() {
-            if (!root.visible) return
-            Qt.callLater(function() {
-                if (!root.visible) return
-                root.positionOppositeFocusedWindow()
-                slideIn.stop()
-                slideIn.to = root.openTargetX
-                slideIn.restart()
-            })
+            root.repositionAfterSwitcher()
+        }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!root.service.appSwitcherHovered) root.repositionAfterSwitcher()
         }
     }
 
@@ -262,7 +269,17 @@ PanelWindow {
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
-            MouseArea { anchors.fill: parent; onClicked: {} }
+            MouseArea {
+                anchors.fill: parent
+                onPressed: root.service.raiseCardModule("sysmon")
+            }
+
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onPressedChanged: {
+                    if (pressed) root.service.raiseCardModule("sysmon")
+                }
+            }
 
             ColumnLayout {
                 z: 1

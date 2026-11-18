@@ -15,7 +15,7 @@ PanelWindow {
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
     exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "qnote" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "qscrollite-qnote"
     // Hold keyboard focus only while editing a note under the pointer.
     WlrLayershell.keyboardFocus: visible && focusedNoteField && notePanelHover.hovered
@@ -36,7 +36,9 @@ PanelWindow {
         { name: "Pink", color: "#6A4855" },
         { name: "Peach", color: "#70533F" },
         { name: "Yellow", color: "#696139" },
-        { name: "Mint", color: "#3F6253" }
+        { name: "Mint", color: "#3F6253" },
+        { name: "Gray", color: "#555B63" },
+        { name: "Black", color: "#24272D" }
     ]
     readonly property string activeNoteColor: noteItems.length
         ? String(noteItems[Math.max(0, Math.min(service.qNoteCurrentIndex, noteItems.length - 1))].color)
@@ -181,17 +183,24 @@ PanelWindow {
         slideIn.restart()
     }
 
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!root.visible || root.closing || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
     Connections {
         target: root.service
         function onActiveWindowIdChanged() {
-            if (!root.visible || root.closing) return
-            Qt.callLater(function() {
-                if (!root.visible || root.closing) return
-                root.positionOppositeFocusedWindow()
-                slideIn.stop()
-                slideIn.to = root.openTargetX
-                slideIn.restart()
-            })
+            root.repositionAfterSwitcher()
+        }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!root.service.appSwitcherHovered) root.repositionAfterSwitcher()
         }
     }
 
@@ -227,6 +236,8 @@ PanelWindow {
         openFromOppositeSide()
     }
 
+    GlowBorder { targetItem: noteCard; cornerRadius: noteCard.radius }
+
     Rectangle {
         id: noteCard
         width: Math.min(270, root.width)
@@ -240,6 +251,13 @@ PanelWindow {
         border.color: "#3b4a63"
         border.width: 1
 
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onPressedChanged: {
+                if (pressed) root.service.raiseCardModule("qnote")
+            }
+        }
+
         HoverHandler {
             id: notePanelHover
             onHoveredChanged: {
@@ -250,14 +268,17 @@ PanelWindow {
             }
         }
 
-        GlowBorder { targetItem: noteCard; cornerRadius: noteCard.radius }
-
         Keys.onEscapePressed: root.close()
         Keys.onPressed: function(event) {
             if (event.key === Qt.Key_Escape) {
                 root.close()
                 event.accepted = true
             }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onPressed: root.service.raiseCardModule("qnote")
         }
 
         ColumnLayout {
@@ -355,8 +376,9 @@ PanelWindow {
                         noteEditor.cursorPosition = start + symbol.length
                     }
                     readonly property bool presetMenuOpen: root.openPresetMenuIndex === index
+                    readonly property real minimumBodyHeight: noteEditor.font.pixelSize * 1.4 * 3
                     width: noteList.width - noteList.leftMargin
-                    height: 138
+                    height: 26 + Math.max(minimumBodyHeight, noteEditor.contentHeight)
                     radius: root.cornerRadius
                     z: presetMenuOpen ? 10 : 0
                     color: Qt.darker(modelData.color, 1.35)
@@ -364,6 +386,13 @@ PanelWindow {
                     border.width: 1
                     readonly property bool noteControlsVisible:
                         noteCardHover.hovered || presetMenuOpen
+
+                    TapHandler {
+                        acceptedButtons: Qt.LeftButton
+                        onPressedChanged: {
+                            if (pressed) root.service.raiseCardModule("qnote")
+                        }
+                    }
 
                     HoverHandler {
                         id: noteCardHover
@@ -374,9 +403,19 @@ PanelWindow {
                     Rectangle {
                         id: presetMenu
                         x: noteItemCard.width - width - 27
-                        y: 26
+                        y: {
+                            var cardTop = noteItemCard.y - noteList.contentY
+                            var belowY = 26
+                            var aboveY = -height - 4
+                            if (cardTop + belowY + height + 4 <= noteList.height)
+                                return belowY
+                            if (cardTop + aboveY >= 4)
+                                return aboveY
+                            return Math.max(4 - cardTop,
+                                Math.min(belowY, noteList.height - cardTop - height - 4))
+                        }
                         width: 158
-                        height: 78
+                        height: 102
                         radius: root.cornerRadius
                         visible: noteItemCard.presetMenuOpen
                         z: 20
@@ -440,6 +479,22 @@ PanelWindow {
                                 background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[5].color); border.width: 0 }
                                 onClicked: noteItemCard.choosePreset(5)
                             }
+                            ShellButton {
+                                width: (presetList.width - presetList.columnSpacing) / 2
+                                height: 22
+                                font.pixelSize: 9
+                                text: "Gray"
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[6].color); border.width: 0 }
+                                onClicked: noteItemCard.choosePreset(6)
+                            }
+                            ShellButton {
+                                width: (presetList.width - presetList.columnSpacing) / 2
+                                height: 22
+                                font.pixelSize: 9
+                                text: "Black"
+                                background: Rectangle { radius: root.cornerRadius; color: root.noteBackground(root.pastelPalette[7].color); border.width: 0 }
+                                onClicked: noteItemCard.choosePreset(7)
+                            }
                         }
                     }
 
@@ -454,6 +509,12 @@ PanelWindow {
 
                             ShellTextField {
                                 id: noteTitle
+                                TapHandler {
+                                    acceptedButtons: Qt.LeftButton
+                                    onPressedChanged: {
+                                        if (pressed) root.service.raiseCardModule("qnote")
+                                    }
+                                }
                                 Layout.fillWidth: true
                                 implicitHeight: 23
                                 leftPadding: 4
@@ -470,7 +531,10 @@ PanelWindow {
                                 }
                                 onActiveFocusChanged: {
                                     root.setNoteFieldFocus(noteTitle, activeFocus)
-                                    if (activeFocus) root.openPresetMenuIndex = -1
+                                    if (activeFocus) {
+                                        root.service.raiseCardModule("qnote")
+                                        root.openPresetMenuIndex = -1
+                                    }
                                     else Qt.callLater(function() { root.service.flushQNoteSave() })
                                 }
                                 onTextChanged: root.updateNoteField(noteItemCard.index, "title", text)
@@ -615,6 +679,12 @@ PanelWindow {
                             id: noteEditor
                             Layout.fillWidth: true
                             Layout.fillHeight: true
+                            TapHandler {
+                                acceptedButtons: Qt.LeftButton
+                                onPressedChanged: {
+                                    if (pressed) root.service.raiseCardModule("qnote")
+                                }
+                            }
                             text: noteItemCard.modelData.text || ""
                             placeholderText: "Write a note…"
                             color: "#e5ebf4"
@@ -632,6 +702,7 @@ PanelWindow {
                             onActiveFocusChanged: {
                                 root.setNoteFieldFocus(noteEditor, activeFocus)
                                 if (activeFocus) {
+                                    root.service.raiseCardModule("qnote")
                                     root.openPresetMenuIndex = -1
                                     root.service.qNoteCurrentIndex = noteItemCard.index
                                 }
@@ -639,6 +710,32 @@ PanelWindow {
                             }
                             onTextChanged: root.updateNoteField(noteItemCard.index, "text", text)
                         }
+                    }
+                }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 14
+                    z: 2
+                    visible: noteList.contentY > 1
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: "#ee111722" }
+                        GradientStop { position: 1; color: "#00111722" }
+                    }
+                }
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 14
+                    z: 2
+                    visible: noteList.contentY + noteList.height < noteList.contentHeight - 1
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: "#00111722" }
+                        GradientStop { position: 1; color: "#ee111722" }
                     }
                 }
 

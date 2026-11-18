@@ -21,7 +21,7 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.raisedCardModule === "settings" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-idle-settings"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     property real settingsCardX: -500
@@ -40,6 +40,16 @@ PanelWindow {
         settingsSlide.restart()
     }
 
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!root.visible || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            settingsSlide.stop()
+            settingsSlide.to = root.settingsTargetX
+            settingsSlide.restart()
+        })
+    }
+
     NumberAnimation {
         id: settingsSlide
         target: root
@@ -52,14 +62,11 @@ PanelWindow {
     Connections {
         target: root.service
         function onActiveWindowIdChanged() {
-            if (!root.visible) return
-            Qt.callLater(function() {
-                if (!root.visible) return
-                root.positionOppositeFocusedWindow()
-                settingsSlide.stop()
-                settingsSlide.to = root.settingsTargetX
-                settingsSlide.restart()
-            })
+            root.repositionAfterSwitcher()
+        }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!root.service.appSwitcherHovered) root.repositionAfterSwitcher()
         }
     }
 
@@ -73,7 +80,7 @@ PanelWindow {
     property bool clockPreviewColonVisible: true
 
     Timer {
-        interval: 2000
+        interval: 1000
         repeat: true
         running: root.clockPreviewVisible
         onTriggered: {
@@ -671,6 +678,7 @@ font.pixelSize: 17
     }
 
     Component.onCompleted: {
+        service.raiseCardModule("settings")
         openFromOppositeSide()
         Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     }

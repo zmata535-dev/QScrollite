@@ -13,7 +13,8 @@ PanelWindow {
     visible: service.notificationCenterOpen
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.switcherService && service.switcherService.raisedCardModule === "notifications"
+        ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-notification-center"
     WlrLayershell.keyboardFocus: pairedWithCalendar ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
 
@@ -23,6 +24,16 @@ PanelWindow {
     readonly property real pairedNotificationWidth: Math.min(560, (root.width - 48) * 0.56)
     property var pairedInputRegion: Region { item: card }
     mask: pairedWithCalendar ? pairedInputRegion : null
+
+    onVisibleChanged: {
+        if (visible && service.switcherService)
+            service.switcherService.raiseCardModule("notifications")
+    }
+
+    Component.onCompleted: {
+        if (visible && service.switcherService)
+            service.switcherService.raiseCardModule("notifications")
+    }
 
     Item {
         anchors.fill: parent
@@ -46,8 +57,7 @@ PanelWindow {
                 ? root.pairedNotificationWidth : Math.min(560, root.width - 32)
             height: Math.min(520, root.height - 32)
             x: root.pairedWithCalendar
-                ? PanelPlacement.oppositeTargetX(root.service.switcherService, root.screen.x,
-                    root.width, root.pairedCalendarWidth + 14 + root.pairedNotificationWidth, 12)
+                ? root.service.switcherService.calendarGroupTargetX
                     + root.pairedCalendarWidth + 14
                 : (root.width - width) / 2
             anchors.verticalCenter: parent.verticalCenter

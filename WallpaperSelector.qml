@@ -22,7 +22,7 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: switcherService.raisedCardModule === "wallpaper" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-wallpaper-picker"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     property real cardX: -1000
@@ -41,6 +41,16 @@ PanelWindow {
         slideIn.restart()
     }
 
+    function repositionAfterSwitcher() {
+        Qt.callLater(function() {
+            if (!selectorWindow.visible || PanelPlacement.switcherActive(switcherService)) return
+            selectorWindow.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = selectorWindow.openTargetX
+            slideIn.restart()
+        })
+    }
+
     NumberAnimation {
         id: slideIn
         target: selectorWindow
@@ -53,14 +63,11 @@ PanelWindow {
     Connections {
         target: switcherService
         function onActiveWindowIdChanged() {
-            if (!selectorWindow.visible) return
-            Qt.callLater(function() {
-                if (!selectorWindow.visible) return
-                selectorWindow.positionOppositeFocusedWindow()
-                slideIn.stop()
-                slideIn.to = selectorWindow.openTargetX
-                slideIn.restart()
-            })
+            selectorWindow.repositionAfterSwitcher()
+        }
+        function onOpenChanged() { if (!switcherService.open) selectorWindow.repositionAfterSwitcher() }
+        function onAppSwitcherHoveredChanged() {
+            if (!switcherService.appSwitcherHovered) selectorWindow.repositionAfterSwitcher()
         }
     }
 
@@ -116,6 +123,7 @@ PanelWindow {
     }
 
     Component.onCompleted: {
+        switcherService.raiseCardModule("wallpaper")
         searchQuery = "";
         searchInput.text = "";
         openFromOppositeSide()
