@@ -416,8 +416,8 @@ PanelWindow {
                         z: 2
                         visible: resultList.contentY > 1
                         gradient: Gradient {
-                            GradientStop { position: 0; color: "#ee0b0f17" }
-                            GradientStop { position: 1; color: "#000b0f17" }
+                            GradientStop { position: 0; color: "#ee111722" }
+                            GradientStop { position: 1; color: "#00111722" }
                         }
                     }
 
@@ -429,8 +429,8 @@ PanelWindow {
                         z: 2
                         visible: resultList.contentY + resultList.height < resultList.contentHeight - 1
                         gradient: Gradient {
-                            GradientStop { position: 0; color: "#000b0f17" }
-                            GradientStop { position: 1; color: "#ee0b0f17" }
+                            GradientStop { position: 0; color: "#00111722" }
+                            GradientStop { position: 1; color: "#ee111722" }
                         }
                     }
                 }
