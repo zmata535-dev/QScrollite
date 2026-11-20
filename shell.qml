@@ -65,7 +65,7 @@ ShellRoot {
 
         WallpaperSelector {
             service: root.wallpaperService
-            switcherService: switcherService
+            windowSwitcherService: switcherService
         }
     }
 
@@ -582,10 +582,6 @@ ShellRoot {
 
         function interval(sec: string): void {
             service.setInterval(parseInt(sec) || 0);
-        }
-
-        function rescan(): void {
-            service.scan();
         }
 
         function status(): string {

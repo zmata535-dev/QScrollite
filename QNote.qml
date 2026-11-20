@@ -173,14 +173,22 @@ PanelWindow {
     }
 
     function positionOppositeFocusedWindow() {
-        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x, root.width, noteCard.width, 12)
+        var requestedX = PanelPlacement.oppositeTargetX(
+            service, root.screen.x, root.width, noteCard.width, 12)
+        var margin = Math.min(12, Math.max(0, (root.width - noteCard.width) / 2))
+        var maxX = Math.max(margin, root.width - noteCard.width - margin)
+        openTargetX = Math.max(margin, Math.min(requestedX, maxX))
     }
 
     function openFromOppositeSide() {
-        positionOppositeFocusedWindow()
-        cardX = PanelPlacement.entryX(openTargetX, root.width, noteCard.width, root.screen.x, 12)
-        slideIn.to = openTargetX
-        slideIn.restart()
+        Qt.callLater(function() {
+            if (!root.visible || root.closing || root.width <= 0 || noteCard.width <= 0) return
+            root.positionOppositeFocusedWindow()
+            root.cardX = PanelPlacement.entryX(root.openTargetX,
+                root.width, noteCard.width, root.screen.x, 12)
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
     }
 
     function repositionAfterSwitcher() {
@@ -234,6 +242,11 @@ PanelWindow {
     Component.onCompleted: {
         ensureNotes()
         openFromOppositeSide()
+    }
+
+    onWidthChanged: {
+        if (visible && !closing && !slideIn.running && cardX !== openTargetX)
+            openFromOppositeSide()
     }
 
     GlowBorder { targetItem: noteCard; cornerRadius: noteCard.radius }

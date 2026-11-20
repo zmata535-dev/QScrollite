@@ -23,15 +23,16 @@ PanelWindow {
     // Keep hot-corner surfaces (Overlay layer) interactive above the panel.
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "quickshell-app-switcher"
-    // Keep keyboard focus for Escape handling for as long as the switcher is open.
-    WlrLayershell.keyboardFocus: switcherWindow.service.open
+    // Only take keyboard focus while the pointer is over the switcher, so
+    // applications remain able to receive keyboard input outside the bar.
+    WlrLayershell.keyboardFocus: switcherWindow.service.open && containerHoverHandler.hovered
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
         Region { item: container }
         Region { item: appContextMenu }
     }
 
-    color: "#35080c16"
+    color: "transparent"
 
     property var now: service.clockNow
     property int processRssKiB: 0
@@ -1683,8 +1684,8 @@ RowLayout {
                     border.width: 1
 
                     Text {
-                        anchors.fill: parent
-                        text: switcherWindow.service.showSwitcherSystemControls ? "⌄" : "⌃"
+                        anchors.centerIn: parent
+                        text: switcherWindow.service.showSwitcherSystemControls ? "🢗" : "🢕"
                         color: switcherControlsMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 18

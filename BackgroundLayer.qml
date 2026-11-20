@@ -40,7 +40,8 @@ PanelWindow {
             anchors.fill: parent
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            cache: true
+            sourceSize: Qt.size(width, height)
+            cache: false
             smooth: true
             mipmap: true
             opacity: 1
@@ -54,6 +55,7 @@ PanelWindow {
                     img1.opacity = 1;
                     img2.opacity = 0;
                     crossfadeContainer.showingFirst = true;
+                    wallpaperCleanupTimer.restart();
                 }
             }
         }
@@ -63,7 +65,8 @@ PanelWindow {
             anchors.fill: parent
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            cache: true
+            sourceSize: Qt.size(width, height)
+            cache: false
             smooth: true
             mipmap: true
             opacity: 0
@@ -77,6 +80,7 @@ PanelWindow {
                     img2.opacity = 1;
                     img1.opacity = 0;
                     crossfadeContainer.showingFirst = false;
+                    wallpaperCleanupTimer.restart();
                 }
             }
         }
@@ -89,6 +93,7 @@ PanelWindow {
 
             if (showingFirst) {
                 img2.source = url;
+                wallpaperCleanupTimer.restart();
                 if (img2.status === Image.Ready) {
                     img2.opacity = 1;
                     img1.opacity = 0;
@@ -96,6 +101,7 @@ PanelWindow {
                 }
             } else {
                 img1.source = url;
+                wallpaperCleanupTimer.restart();
                 if (img1.status === Image.Ready) {
                     img1.opacity = 1;
                     img2.opacity = 0;
@@ -107,6 +113,20 @@ PanelWindow {
         Component.onCompleted: {
             if (activeWallpaper) {
                 applyWallpaper(activeWallpaper);
+            }
+        }
+
+        // Keep the previous wallpaper only long enough to finish the crossfade.
+        // A later ready event restarts this timer if loading took longer.
+        Timer {
+            id: wallpaperCleanupTimer
+            interval: 700
+            repeat: false
+            onTriggered: {
+                if (img1.opacity <= 0 && img1.source.toString() !== crossfadeContainer.targetUrl)
+                    img1.source = "";
+                if (img2.opacity <= 0 && img2.source.toString() !== crossfadeContainer.targetUrl)
+                    img2.source = "";
             }
         }
     }

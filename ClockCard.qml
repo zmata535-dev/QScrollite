@@ -20,7 +20,7 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.layer: service.appMenuOpen ? WlrLayer.Top : WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-clock"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region { }
@@ -33,14 +33,15 @@ PanelWindow {
     readonly property real closeFade: Math.max(fractureProgress, slideCloseProgress)
     readonly property string dateLabel: Qt.formatDate(now, "dddd, dd MMM yyyy")
     property string focusAtOpen: String(service.activeWindowId || "")
-    readonly property bool otherComponentOpen: service.open || service.appMenuOpen || service.appMenuPending
-        || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen || service.clipboardOpen
+    readonly property bool otherComponentOpen: service.open || service.gDictCalcOpen || service.qSysMonOpen
+        || service.qNoteOpen || service.clipboardOpen
         || service.bluetoothOpen || service.calendarOpen || service.idleConfigOpen
         || (service.wallpaperService && service.wallpaperService.selectorOpen)
         || (service.notificationService && service.notificationService.notificationCenterOpen)
 
     function closeOnFocusLoss() {
-        if (!service.clockOpen) return
+        if (!service.clockOpen || service.qNoteOpen || service.appMenuOpen || service.appMenuPending) return
+        if (service.open && service.emptyWorkspaceComponentIsPinned("clock")) return
         service.requestClockClose(true)
     }
 
@@ -168,6 +169,8 @@ PanelWindow {
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                         text: Qt.formatDateTime(root.now, "HH")
                         color: root.service.idleClockTextColor
+                        style: Text.Outline
+                        styleColor: "#b8000000"
 font.pixelSize: root.service.idleClockTextSize
 horizontalAlignment: Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
@@ -176,6 +179,8 @@ horizontalAlignment: Text.AlignRight
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.preferredWidth: 36
                         text: ":"
                         color: root.service.idleClockTextColor
+                        style: Text.Outline
+                        styleColor: "#b8000000"
                         opacity: root.colonVisible ? 1 : 0.18
 font.pixelSize: root.service.idleClockTextSize * 0.92
 horizontalAlignment: Text.AlignHCenter
@@ -185,6 +190,8 @@ horizontalAlignment: Text.AlignHCenter
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                         text: Qt.formatDateTime(root.now, "mm")
                         color: root.service.idleClockTextColor
+                        style: Text.Outline
+                        styleColor: "#b8000000"
 font.pixelSize: root.service.idleClockTextSize
 horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
@@ -200,6 +207,8 @@ horizontalAlignment: Text.AlignLeft
                         Layout.fillWidth: true
                         text: root.dateLabel
                         color: "#94a3b8"
+                        style: Text.Outline
+                        styleColor: "#b8000000"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.weight: Font.Light
                         font.pixelSize: 17
@@ -213,6 +222,8 @@ horizontalAlignment: Text.AlignLeft
                         Text {
                             text: "󰂚"
                             color: "#c0c0d8"
+                            style: Text.Outline
+                            styleColor: "#b8000000"
                             font.family: "JetBrainsMono Nerd Font Mono"
                             font.pixelSize: 17
                         }
@@ -220,6 +231,8 @@ horizontalAlignment: Text.AlignLeft
                         Text {
                             text: String(root.service.unreadNotificationCount)
                             color: "#c0c0d8"
+                            style: Text.Outline
+                            styleColor: "#b8000000"
                             font.family: "JetBrainsMono Nerd Font Mono"
                             font.pixelSize: 13
                         }

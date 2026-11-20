@@ -10,7 +10,7 @@ PanelWindow {
     id: selectorWindow
 
     required property var service
-    required property var switcherService
+    required property var windowSwitcherService
 
     screen: Quickshell.screens[0]
     visible: service.selectorOpen
@@ -22,14 +22,15 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: switcherService.raisedCardModule === "wallpaper" ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.layer: windowSwitcherService.raisedCardModule === "wallpaper" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-wallpaper-picker"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     property real cardX: -1000
     property real openTargetX: 12
+    readonly property real galleryCellWidth: 194
 
     function positionOppositeFocusedWindow() {
-        openTargetX = PanelPlacement.oppositeTargetX(switcherService, selectorWindow.screen.x,
+        openTargetX = PanelPlacement.oppositeTargetX(windowSwitcherService, selectorWindow.screen.x,
             selectorWindow.width, modalBox.width, 12)
     }
 
@@ -43,12 +44,37 @@ PanelWindow {
 
     function repositionAfterSwitcher() {
         Qt.callLater(function() {
-            if (!selectorWindow.visible || PanelPlacement.switcherActive(switcherService)) return
+            if (!selectorWindow.visible || PanelPlacement.switcherActive(windowSwitcherService)) return
             selectorWindow.positionOppositeFocusedWindow()
             slideIn.stop()
             slideIn.to = selectorWindow.openTargetX
             slideIn.restart()
         })
+    }
+
+    function scrollToCurrentWallpaper() {
+        Qt.callLater(function() {
+            if (!selectorWindow.visible) return
+            var activeIndex = service.wallpapers.indexOf(service.currentWallpaper)
+            if (activeIndex >= 0)
+                galleryGrid.positionViewAtIndex(activeIndex, GridView.Contain)
+        })
+    }
+
+    function releaseThumbnailImages() {
+        slideIn.stop()
+        for (var i = 0; i < galleryGrid.count; i++) {
+            var delegate = galleryGrid.itemAtIndex(i)
+            if (delegate && delegate.releaseImage)
+                delegate.releaseImage()
+        }
+    }
+
+    Connections {
+        target: service
+        function onWallpapersChanged() { selectorWindow.scrollToCurrentWallpaper() }
+        function onCurrentWallpaperChanged() { selectorWindow.scrollToCurrentWallpaper() }
+        function onSelectorClosing() { selectorWindow.releaseThumbnailImages() }
     }
 
     NumberAnimation {
@@ -61,30 +87,17 @@ PanelWindow {
     }
 
     Connections {
-        target: switcherService
+        target: windowSwitcherService
         function onActiveWindowIdChanged() {
             selectorWindow.repositionAfterSwitcher()
         }
-        function onOpenChanged() { if (!switcherService.open) selectorWindow.repositionAfterSwitcher() }
+        function onOpenChanged() { if (!windowSwitcherService.open) selectorWindow.repositionAfterSwitcher() }
         function onAppSwitcherHoveredChanged() {
-            if (!switcherService.appSwitcherHovered) selectorWindow.repositionAfterSwitcher()
+            if (!windowSwitcherService.appSwitcherHovered) selectorWindow.repositionAfterSwitcher()
         }
     }
 
     color: "#35080c16"
-
-    property string searchQuery: ""
-
-    property var filteredWallpapers: {
-        if (!searchQuery || searchQuery.trim() === "") {
-            return service.wallpapers;
-        }
-        var q = searchQuery.toLowerCase().trim();
-        return service.wallpapers.filter(function(path) {
-            var name = path.split('/').pop().toLowerCase();
-            return name.indexOf(q) !== -1 || path.toLowerCase().indexOf(q) !== -1;
-        });
-    }
 
     // Keyboard shortcuts
     Item {
@@ -103,31 +116,18 @@ PanelWindow {
             service.closeSelector();
         }
 
-        Keys.onLeftPressed: {
-            service.prev();
-        }
-
-        Keys.onRightPressed: {
-            service.next();
-        }
-
         Keys.onPressed: event => {
-            if (event.key === Qt.Key_R && !searchInput.activeFocus) {
+            if (event.key === Qt.Key_R) {
                 service.random();
-                event.accepted = true;
-            } else if (event.key === Qt.Key_F5) {
-                service.scan();
                 event.accepted = true;
             }
         }
     }
 
     Component.onCompleted: {
-        switcherService.raiseCardModule("wallpaper")
-        searchQuery = "";
-        searchInput.text = "";
+        windowSwitcherService.raiseCardModule("wallpaper")
         openFromOppositeSide()
-        searchInput.forceActiveFocus();
+        scrollToCurrentWallpaper()
     }
 
     // Backdrop click dismisses modal
@@ -145,7 +145,7 @@ PanelWindow {
         id: modalBox
         x: selectorWindow.cardX
         y: (parent.height - height) / 2
-        width: Math.min(parent.width - 40, 860)
+        width: Math.max(0, Math.min(parent.width - 40, 3 * selectorWindow.galleryCellWidth + 30))
         height: Math.min(parent.height - 40, 440)
         color: "#111722"
         radius: 14
@@ -186,7 +186,7 @@ color: "#f0f2fa"
 
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: countLabel
                         anchors.centerIn: parent
-                        text: service.wallpapers.length + " wallpapers"
+                        text: service.isScanning ? "Reading…" : service.wallpapers.length + " wallpapers"
                         color: "#8990b3"
                         font.pixelSize: 10
                     }
@@ -222,123 +222,6 @@ color: "#f0f2fa"
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
-
-                // Search input
-                Rectangle {
-                    Layout.preferredWidth: Math.max(150, Math.round((modalBox.width - 28) * 0.3))
-                    Layout.minimumWidth: 150
-                    implicitHeight: 32
-                    color: "#161d2a"
-                    radius: 6
-                    border.color: searchInput.activeFocus ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 9
-                        anchors.rightMargin: 8
-                        spacing: 6
-
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "󰍉"
-font.pixelSize: 12
-                            color: "#8092ab"
-                        }
-
-                        TextInput { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;id: searchInput
-                            Layout.fillWidth: true
-                            color: "#dce5f2"
-                            font.pixelSize: 11
-                            clip: true
-                            selectByMouse: true
-                            Keys.onEscapePressed: function(event) {
-                                service.closeSelector();
-                                event.accepted = true;
-                            }
-                            onTextChanged: {
-                                selectorWindow.searchQuery = text;
-                            }
-
-                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "Filter wallpapers..."
-                                color: "#8092ab"
-                                font.pixelSize: 11
-                                visible: !searchInput.text && !searchInput.activeFocus
-                            }
-                        }
-
-                        // Clear search button
-                        Rectangle {
-                            visible: searchInput.text.length > 0
-                            implicitWidth: 20
-                            implicitHeight: 20
-                            radius: 6
-                            color: clearSearchMouse.containsMouse ? "#273650" : "#161d2a"
-                            border.color: clearSearchMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                            border.width: 1
-
-                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
-                                text: "✕"
-                                color: clearSearchMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                                font.pixelSize: 11
-                            }
-
-                            MouseArea {
-                                id: clearSearchMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: searchInput.text = ""
-                            }
-                        }
-                    }
-                }
-
-                // Prev Button
-                Rectangle {
-                    implicitWidth: 62
-                    implicitHeight: 32
-                    radius: 6
-                    color: prevMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: prevMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "◀"; font.pixelSize: 10; color: prevMouse.containsMouse ? "#abc7ff" : "#8092ab" }
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Prev"; font.pixelSize: 12; color: prevMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
-                    }
-                    MouseArea {
-                        id: prevMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: service.prev()
-                    }
-                }
-
-                // Next Button
-                Rectangle {
-                    implicitWidth: 62
-                    implicitHeight: 32
-                    radius: 6
-                    color: nextMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: nextMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Next"; font.pixelSize: 12; color: nextMouse.containsMouse ? "#abc7ff" : "#dce5f2" }
-                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "▶"; font.pixelSize: 10; color: nextMouse.containsMouse ? "#abc7ff" : "#8092ab" }
-                    }
-                    MouseArea {
-                        id: nextMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: service.next()
-                    }
-                }
 
                 // Random Shuffle Button
                 Rectangle {
@@ -397,58 +280,40 @@ color: service.slideshowInterval > 0 || timerMouse.containsMouse ? "#abc7ff" : "
                     }
                 }
 
-                // Rescan Button
-                Rectangle {
-                    implicitWidth: 34
-                    implicitHeight: 32
-                    radius: 6
-                    color: scanMouse.containsMouse ? "#273650" : "#161d2a"
-                    border.color: scanMouse.containsMouse ? "#abc7ff" : "#2b364a"
-                    border.width: 1
-
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;anchors.centerIn: parent
-                        text: "󰑐"
-font.pixelSize: 12
-                        color: scanMouse.containsMouse ? "#abc7ff" : "#8092ab"
-                        rotation: service.isScanning ? 360 : 0
-                        Behavior on rotation {
-                            NumberAnimation { duration: 500 }
-                        }
-                    }
-                    MouseArea {
-                        id: scanMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: service.scan()
-                    }
-                }
             }
 
             // Gallery Grid
             Item {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 284
-                Layout.minimumHeight: 284
-                Layout.maximumHeight: 284
+                Layout.fillHeight: true
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 8
+                    color: "#0b0f17"
+                }
 
                 GridView {
                     id: galleryGrid
                     anchors.fill: parent
                     clip: true
-                    flow: GridView.TopToBottom
-                    flickableDirection: Flickable.HorizontalFlick
-                    cellWidth: 194
+                    flow: GridView.FlowLeftToRight
+                    flickableDirection: Flickable.VerticalFlick
+                    cellWidth: Math.floor(width / 3)
                     cellHeight: 142
-                    model: selectorWindow.filteredWallpapers
-                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                    model: service.wallpapers
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
                     delegate: Item {
                         id: cardItem
                         required property var modelData
                         required property int index
-                        width: 184
+                        width: Math.max(0, galleryGrid.cellWidth - 10)
                         height: 132
+
+                        function releaseImage() {
+                            wallpaperThumbnail.source = ""
+                        }
 
                         property bool isActive: modelData === service.currentWallpaper
 
@@ -471,11 +336,13 @@ font.pixelSize: 12
                                 radius: 8
 
                                 Image {
+                                    id: wallpaperThumbnail
                                     anchors.fill: parent
                                     source: "file://" + modelData
+                                    sourceSize: Qt.size(width * 2, height * 2)
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
-                                    cache: true
+                                    cache: false
                                     smooth: true
                                 }
 
@@ -539,10 +406,10 @@ color: "#abc7ff"
                         }
                     }
 
-                    // Empty state when filter matches nothing
+                    // Empty state while the directory scan is empty
                     Item {
                         anchors.fill: parent
-                        visible: selectorWindow.filteredWallpapers.length === 0
+                        visible: service.wallpapers.length === 0
 
                         ColumnLayout {
                             anchors.centerIn: parent
@@ -555,11 +422,37 @@ font.pixelSize: 26
                             }
 
                             Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.alignment: Qt.AlignHCenter
-                                text: "No wallpapers found matching \"" + selectorWindow.searchQuery + "\""
+                                text: service.isScanning ? "Reading wallpaper files…" : "No wallpapers found"
                                 color: "#8990b3"
                                 font.pixelSize: 11
                             }
                         }
+                    }
+                }
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 14
+                    z: 2
+                    visible: galleryGrid.contentY > 1
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: "#ee111722" }
+                        GradientStop { position: 1; color: "#00111722" }
+                    }
+                }
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 14
+                    z: 2
+                    visible: galleryGrid.contentY + galleryGrid.height < galleryGrid.contentHeight - 1
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: "#00111722" }
+                        GradientStop { position: 1; color: "#ee111722" }
                     }
                 }
             }
@@ -578,7 +471,7 @@ font.pixelSize: 26
 
                 Item { Layout.fillWidth: true }
 
-                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "[Esc] Close  •  [← / →] Prev/Next  •  [R] Random  •  [F5] Rescan"
+                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "[Esc] Close  •  [R] Random"
                     color: "#5e668c"
                     font.pixelSize: 9
                 }

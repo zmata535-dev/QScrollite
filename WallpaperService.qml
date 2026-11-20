@@ -11,8 +11,20 @@ QtObject {
     property int slideshowInterval: 0
     property bool selectorOpen: false
     property bool isScanning: false
-    property bool hasScanned: false
+    property bool refreshPending: false
     property bool stateLoaded: false
+
+    signal selectorClosing()
+
+    property var wallpaperManagerRestartTimer: Timer {
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            if (service.selectorOpen) return
+            var home = (Quickshell.env("HOME") || "").toString()
+            Quickshell.execDetached(["bash", home + "/.config/quickshell/bin/qs-ctl", "restart"])
+        }
+    }
 
     readonly property string intervalLabel: {
         if (slideshowInterval <= 0) return "Off";
@@ -112,21 +124,32 @@ QtObject {
     }
 
     function toggleSelector() {
-        selectorOpen = !selectorOpen;
-        if (selectorOpen && !hasScanned) scan();
+        if (selectorOpen) {
+            closeSelector();
+        } else {
+            openSelector();
+        }
     }
 
     function openSelector() {
+        wallpaperManagerRestartTimer.stop()
         selectorOpen = true;
-        if (!hasScanned) scan();
+        refreshWallpapers();
     }
 
     function closeSelector() {
+        if (!selectorOpen) return;
+        selectorClosing();
         selectorOpen = false;
+        wallpaperManagerRestartTimer.restart();
     }
 
-    function scan() {
-        if (isScanning) return;
+    function refreshWallpapers() {
+        if (isScanning) {
+            refreshPending = true;
+            return;
+        }
+        refreshPending = false;
         isScanning = true;
         scanner.running = true;
     }
@@ -181,7 +204,6 @@ QtObject {
                 ? output.split("\n").filter(function(path) { return path.length > 0; })
                 : []
             service.wallpapers = lines
-            service.hasScanned = true
             service.isScanning = false
 
             var found = service.currentWallpaper ? lines.indexOf(service.currentWallpaper) : -1
@@ -192,6 +214,7 @@ QtObject {
                 service.currentWallpaper = lines[0]
                 service.saveState()
             }
+            if (service.refreshPending) service.refreshWallpapers()
         }
     }
 

@@ -22,7 +22,7 @@ PanelWindow {
         right: true
     }
 
-    WlrLayershell.layer: service.raisedCardModule === "appmenu" ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "quickshell-app-menu"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     mask: Region {
@@ -34,6 +34,7 @@ PanelWindow {
     property bool showAllApps: false
     property int appRevision: 0
     property int selectedIndex: 0
+    property bool keyboardSelectionActive: false
     property var calculation: Calculator.evaluate(filterText)
     property real cardEntranceOffset: -36
     property real cardEntranceOpacity: 0
@@ -111,6 +112,7 @@ PanelWindow {
             filterText = service.appMenuInitialText
             service.appMenuInitialText = ""
             selectedIndex = 0
+            keyboardSelectionActive = false
             entranceAnimation.restart()
             Qt.callLater(function() {
                 if (root.visible) searchField.forceActiveFocus()
@@ -161,6 +163,7 @@ PanelWindow {
 
     function moveSelection(amount) {
         if (menuRows.length === 0) return
+        keyboardSelectionActive = true
         selectedIndex = (selectedIndex + amount + menuRows.length) % menuRows.length
         resultList.positionViewAtIndex(selectedIndex, ListView.Contain)
     }
@@ -212,6 +215,26 @@ PanelWindow {
             MouseArea {
                 anchors.fill: parent
                 onClicked: {}
+            }
+
+            HoverHandler {
+                id: menuPointerHover
+                property point lastPosition: Qt.point(-1, -1)
+                onHoveredChanged: {
+                    if (hovered) {
+                        lastPosition = point.position
+                        root.keyboardSelectionActive = false
+                    } else {
+                        lastPosition = Qt.point(-1, -1)
+                    }
+                }
+                onPointChanged: {
+                    if (!hovered) return
+                    var position = point.position
+                    if (position.x === lastPosition.x && position.y === lastPosition.y) return
+                    lastPosition = position
+                    root.keyboardSelectionActive = false
+                }
             }
 
             ColumnLayout {
@@ -272,6 +295,7 @@ PanelWindow {
                             }
                             event.accepted = true
                         }
+                        root.keyboardSelectionActive = true
                     }
                 }
 
@@ -301,75 +325,114 @@ PanelWindow {
                     }
                 }
 
-                ListView {
-                    id: resultList
+                Item {
+                    id: resultListContainer
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, Math.max(120, root.height * 0.62))
+                    Layout.preferredHeight: Math.min(resultList.contentHeight, Math.max(120, root.height * 0.62))
                     clip: true
-                    spacing: 4
-                    model: root.menuRows
-                    currentIndex: root.selectedIndex
-                    boundsBehavior: Flickable.StopAtBounds
 
-                    delegate: Rectangle {
-                        required property var modelData
-                        required property int index
-                        width: ListView.view.width
-                        height: 54
-                        radius: 9
-                        color: index === root.selectedIndex ? "#273650" : "transparent"
-                        border.color: index === root.selectedIndex ? "#5476a4" : "transparent"
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 8
+                        color: "#0b0f17"
+                    }
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 12
-                            spacing: 12
+                    ListView {
+                        id: resultList
+                        anchors.fill: parent
+                        clip: true
+                        spacing: 4
+                        model: root.menuRows
+                        currentIndex: root.selectedIndex
+                        boundsBehavior: Flickable.StopAtBounds
 
-                            Image {
-                                visible: !modelData.isCalculation
-                                Layout.preferredWidth: 34
-                                Layout.preferredHeight: 34
-                                source: modelData.isCalculation ? "" : root.iconSource(modelData.app.entry.icon)
-                                sourceSize.width: 68
-                                sourceSize.height: 68
-                                fillMode: Image.PreserveAspectFit
-                                asynchronous: true
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
+                            width: ListView.view.width
+                            height: 54
+                            radius: 9
+                            color: root.keyboardSelectionActive && index === root.selectedIndex
+                                ? "#273650" : "transparent"
+                            border.color: root.keyboardSelectionActive && index === root.selectedIndex
+                                ? "#5476a4" : "transparent"
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 12
+                                spacing: 12
+
+                                Image {
+                                    visible: !modelData.isCalculation
+                                    Layout.preferredWidth: 34
+                                    Layout.preferredHeight: 34
+                                    source: modelData.isCalculation ? "" : root.iconSource(modelData.app.entry.icon)
+                                    sourceSize.width: 68
+                                    sourceSize.height: 68
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
+                                        text: modelData.isCalculation ? "Copy result" : AppSearch.entryName(modelData.app.entry)
+                                        color: root.keyboardSelectionActive && index === root.selectedIndex
+                                            ? "#abc7ff" : "#e2e8f0"
+                                        font.pixelSize: 14
+                                        elide: Text.ElideRight
+                                    }
+                                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
+                                        text: modelData.isCalculation ? modelData.calculation.value : AppSearch.entrySubtext(modelData.app.entry)
+                                        visible: text.length > 0
+                                        color: "#8998af"
+                                        font.pixelSize: 11
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "↵"
+                                    color: "#8290a7"
+                                    font.pixelSize: 13
+                                }
                             }
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
-                                    text: modelData.isCalculation ? "Copy result" : AppSearch.entryName(modelData.app.entry)
-                                    color: index === root.selectedIndex ? "#abc7ff" : "#e2e8f0"
-                                    font.pixelSize: 14
-                                    elide: Text.ElideRight
-                                }
-                                Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
-                                    text: modelData.isCalculation ? modelData.calculation.value : AppSearch.entrySubtext(modelData.app.entry)
-                                    visible: text.length > 0
-                                    color: "#8998af"
-                                    font.pixelSize: 11
-                                    elide: Text.ElideRight
-                                }
-                            }
-                            Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: "↵"
-                                color: "#8290a7"
-                                font.pixelSize: 13
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.activate(modelData)
                             }
                         }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onEntered: root.selectedIndex = index
-                            onClicked: root.activate(modelData)
+                        ScrollBar.vertical: ScrollBar { }
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 14
+                        z: 2
+                        visible: resultList.contentY > 1
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "#ee0b0f17" }
+                            GradientStop { position: 1; color: "#000b0f17" }
                         }
                     }
 
-                    ScrollBar.vertical: ScrollBar { }
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 14
+                        z: 2
+                        visible: resultList.contentY + resultList.height < resultList.contentHeight - 1
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "#000b0f17" }
+                            GradientStop { position: 1; color: "#ee0b0f17" }
+                        }
+                    }
                 }
 
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true

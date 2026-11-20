@@ -28,39 +28,23 @@ PanelWindow {
     WlrLayershell.keyboardFocus: visible && focusedInput && cardHover.hovered
         ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     mask: Region { item: card }
-    property real cardX: 12
+    property real cardX: -500
     property real openTargetX: 12
-    property string openEdge: "left"
     property string focusAtOpen: ""
+    property bool openingScheduled: false
     property var focusedInput: null
 
-    function focusedWindowGeometry() {
-        if (service.activeCompositor !== "hyprland") return null
-        var targetId = String(service.activeWindowId || "")
-        var workspaceList = service.workspaces || []
-        for (var i = 0; i < workspaceList.length; i++) {
-            var windows = workspaceList[i].windows || []
-            for (var j = 0; j < windows.length; j++) {
-                if (String(windows[j].id) === targetId) return windows[j]
-            }
-        }
-        return null
-    }
-
     function updateOpenTarget() {
-        var geometry = focusedWindowGeometry()
-        var screenLeft = Number(root.screen.x || 0)
-        var appLeftX = geometry
-            ? Number(geometry.x || 0)
-            : screenLeft + root.width
-        openEdge = appLeftX < screenLeft + root.width / 2 ? "right" : "left"
-        openTargetX = openEdge === "right"
-            ? root.width - card.width - 12 : 12
+        var requestedX = PanelPlacement.oppositeTargetX(
+            service, root.screen.x, root.width, card.width, 12)
+        var margin = Math.min(12, Math.max(0, (root.width - card.width) / 2))
+        var maxX = Math.max(margin, root.width - card.width - margin)
+        openTargetX = Math.max(margin, Math.min(requestedX, maxX))
     }
 
     function placeOppositeFocusedWindow() {
         updateOpenTarget()
-        cardX = openEdge === "right" ? root.width + 12 : -card.width - 12
+        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 12)
     }
 
     function repositionForFocusedApp(force) {
@@ -76,11 +60,17 @@ PanelWindow {
     }
 
     function openAtOppositeSide() {
-        if (!visible || slideIn.running) return
+        if (!visible || slideIn.running || openingScheduled) return
+        openingScheduled = true
         releaseKeyboardFocus()
         focusAtOpen = String(service.activeWindowId || "")
-        placeOppositeFocusedWindow()
-        slideIn.restart()
+        Qt.callLater(function() {
+            root.openingScheduled = false
+            if (!root.visible || card.width <= 0 || root.width <= 0) return
+            root.placeOppositeFocusedWindow()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
     }
 
     NumberAnimation {
@@ -529,12 +519,17 @@ PanelWindow {
         if (visible) openAtOppositeSide()
     }
 
+    onWidthChanged: {
+        if (visible && !slideIn.running && !moveToOpenSide.running && cardX !== openTargetX)
+            openAtOppositeSide()
+    }
+
     Item {
         anchors.fill: parent
 
         Rectangle {
             id: card
-            width: Math.min(480, root.width - 24)
+            width: Math.max(0, Math.min(480, root.width - 24))
             height: Math.min(content.implicitHeight + 24, root.height - 48)
             x: root.cardX
             y: (parent.height - height) / 2
@@ -898,7 +893,7 @@ PanelWindow {
                                     source: weatherImageFlickable.visible ? root.weatherImageUrl : ""
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: true
-                                    cache: true
+                                    cache: false
                                 }
 
                                 ScrollBar.vertical: ScrollBar { }

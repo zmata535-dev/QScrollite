@@ -1551,9 +1551,6 @@ QtObject {
         clockOpen = false;
         clockOpenTimer.stop();
         closeSwitcher();
-        appMenuTimer.stop();
-        appMenuPending = false;
-        appMenuOpen = false;
         closeCalendar();
         idleConfigOpen = false;
         wallpaperToggleTimer.stop();
@@ -1745,6 +1742,7 @@ QtObject {
         appMenuInitialText = String(initialText || "")
         cancelCompactClockForAppPanels();
         closeSwitcher(true);
+        raiseCardModule("appmenu");
         if (appMenuInitialText.length > 0) {
             appMenuTimer.stop();
             appMenuPending = false;

@@ -20,18 +20,30 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     mask: Region { item: card }
-    property real cardX: 0
-    property real openTargetX: 0
+    property real cardX: -400
+    property real openTargetX: 16
+    property bool openingScheduled: false
 
     function positionOppositeFocusedWindow() {
-        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x, root.width, card.width, 16)
+        var requestedX = PanelPlacement.oppositeTargetX(
+            service, root.screen.x, root.width, card.width, 16)
+        var margin = Math.min(16, Math.max(0, (root.width - card.width) / 2))
+        var maxX = Math.max(margin, root.width - card.width - margin)
+        openTargetX = Math.max(margin, Math.min(requestedX, maxX))
     }
 
     function openFromOppositeSide() {
-        positionOppositeFocusedWindow()
-        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 16)
-        slideIn.to = openTargetX
-        slideIn.restart()
+        if (!visible || slideIn.running || openingScheduled) return
+        openingScheduled = true
+        Qt.callLater(function() {
+            root.openingScheduled = false
+            if (!root.visible || card.width <= 0 || root.width <= 0) return
+            root.positionOppositeFocusedWindow()
+            root.cardX = PanelPlacement.entryX(root.openTargetX,
+                root.width, card.width, root.screen.x, 16)
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
     }
 
     function repositionAfterSwitcher() {
@@ -64,7 +76,19 @@ PanelWindow {
         easing.type: Easing.OutCubic
     }
 
-    Component.onCompleted: openFromOppositeSide()
+    onVisibleChanged: {
+        if (visible) openFromOppositeSide()
+        else slideIn.stop()
+    }
+
+    Component.onCompleted: {
+        if (visible) openFromOppositeSide()
+    }
+
+    onWidthChanged: {
+        if (visible && !slideIn.running && cardX !== openTargetX)
+            openFromOppositeSide()
+    }
 
     property real cpuPercent: 0
     property real memoryPercent: 0
@@ -260,7 +284,7 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.min(372, root.width - 32)
+            width: Math.max(0, Math.min(372, root.width - 32))
             height: Math.min(content.implicitHeight + 32, root.height - 64)
             x: root.cardX
             y: (parent.height - height) / 2
