@@ -128,6 +128,12 @@ PanelWindow {
         enabled: root.visible
         onActivated: root.searchGoogle("convert")
     }
+    Shortcut {
+        sequence: "Ctrl+S"
+        context: Qt.WindowShortcut
+        enabled: root.visible
+        onActivated: root.openWebSearch()
+    }
 
     property bool dictionaryMode: false
     property bool definitionRequested: false
@@ -504,6 +510,16 @@ PanelWindow {
         weatherProcess.running = true
     }
 
+    function openWebSearch() {
+        var query = expression.trim()
+        if (!query) {
+            statusText = "Enter text to search."
+            return
+        }
+        Qt.openUrlExternally("https://www.google.com/search?q=" + encodeURIComponent(query).replace(/%20/g, "+"))
+        root.close()
+    }
+
     onVisibleChanged: {
         if (visible) {
             moveToOpenSide.stop()
@@ -688,6 +704,15 @@ PanelWindow {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
                         spacing: 8
+                        ShellButton {
+                            focusPolicy: Qt.NoFocus
+                            Layout.fillWidth: true
+                            implicitHeight: 25
+                            text: "S̲earch"
+                            enabled: root.expression.trim().length > 0
+                            accent: true
+                            onClicked: root.openWebSearch()
+                        }
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true

@@ -18,6 +18,10 @@ A feature-packed desktop shell built with [Quickshell](https://git.outfoxxed.me/
   - Active window focus, window closing, and workspace navigation.
   - Built-in session controls (Lock, Logout, Reboot, Poweroff).
 
+- **Screen Text Picker (`QTextPicker.qml`)**
+  - Selects a screen region and extracts text locally with Tesseract OCR.
+  - Open with `Super+Shift+C` or from the Clipboard Manager.
+
 - **Dynamic Wallpaper Engine (`WallpaperSelector.qml`, `WallpaperService.qml`, `BackgroundLayer.qml`)**
   - Automatic directory scanner across `~/Pictures`, `~/Wallpapers`, and `~/.local/share/wallpapers`.
   - Visual grid wallpaper picker with thumbnail caching.
@@ -57,6 +61,7 @@ A feature-packed desktop shell built with [Quickshell](https://git.outfoxxed.me/
 | **`gtk3`** / **`libglib2.0-bin`** (`gtk-launch`) | Launches `.desktop` applications from App Menu |
 | **Nerd Font** (e.g. `MesloLGS Nerd Font`) | Icons in launcher, wallpaper picker, and dialogs |
 | **`cantarell-fonts`** | Clean typography for the clock card |
+| **`grim`, `slurp`, `tesseract`, `tesseract-data-eng`** | Screen capture, region selection, and English OCR for QTextPicker |
 
 > **Note on Compositors**: This shell uses Wayland's standard `wlr-layer-shell` protocol. It can run on any Wayland compositor. Window switching and hot-corner navigation dynamically support Hyprland and Niri when present, but neither compositor is a mandatory dependency.
 

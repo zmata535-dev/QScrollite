@@ -25,9 +25,11 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-app-switcher"
     // Only take keyboard focus while the pointer is over the switcher, so
     // applications remain able to receive keyboard input outside the bar.
-    WlrLayershell.keyboardFocus: switcherWindow.service.open && containerHoverHandler.hovered
+    WlrLayershell.keyboardFocus: (switcherWindow.pendingSystemAction.length > 0) ||
+        (switcherWindow.service.open && containerHoverHandler.hovered)
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region {
+        Region { item: systemActionDialog }
         Region { item: container }
         Region { item: appContextMenu }
     }
@@ -40,12 +42,54 @@ PanelWindow {
     property string focusAtOpen: ""
     property string pendingIconFocusWindowId: ""
     property string pendingIconLaunchAppId: ""
+    property int pendingIconLaunchAttempts: 0
     property bool focusedIconScrollPending: true
     readonly property bool hasFocusedApp: !!focusedTiledAppWindow()
     property var contextMenuWindow: null
     property real contextMenuX: 0
     property real contextMenuY: 0
     property bool controlsPointerFollowPending: false
+    property string pendingSystemAction: ""
+
+    function requestSystemAction(action) {
+        pendingSystemAction = action
+    }
+
+    function cancelSystemAction() {
+        pendingSystemAction = ""
+    }
+
+    function confirmSystemAction() {
+        var action = pendingSystemAction
+        pendingSystemAction = ""
+        if (action) switcherWindow.service.runSystemAction(action)
+    }
+
+    function systemActionLabel(action) {
+        if (action === "shutdown") return "Shut down"
+        if (action === "reboot") return "Restart"
+        if (action === "logout") return "Log out"
+        return "Continue"
+    }
+
+    onPendingSystemActionChanged: {
+        if (pendingSystemAction.length > 0) {
+            switcherLeaveTimer.stop()
+            service.appSwitcherClosePending = false
+        } else if (service.open && !containerHoverHandler.hovered) {
+            switcherLeaveTimer.restart()
+        }
+    }
+
+    IdleMonitor {
+        enabled: switcherWindow.pendingSystemAction.length > 0 &&
+            !switcherWindow.service.hasPlayingMedia()
+        timeout: Math.max(1, Number(switcherWindow.service.idleLockTimeout) || 1)
+        respectInhibitors: false
+        onIsIdleChanged: {
+            if (isIdle) switcherWindow.cancelSystemAction()
+        }
+    }
 
     Timer {
         id: switcherControlsPointerTimer
@@ -111,6 +155,64 @@ PanelWindow {
         return false
     }
 
+    function findWindowForPinnedApp(appId) {
+        var workspaces = switcherWindow.service.workspaces || []
+        for (var i = 0; i < workspaces.length; i++) {
+            var windows = workspaces[i].windows || []
+            for (var j = 0; j < windows.length; j++) {
+                if (pinnedAppMatchesWindow(appId, windows[j])) return windows[j]
+            }
+        }
+        return null
+    }
+
+    function beginPinnedAppLaunch(appId) {
+        pendingIconFocusWindowId = ""
+        pendingIconLaunchAppId = switcherWindow.service.normalizedDesktopEntryId(appId)
+        pendingIconLaunchAttempts = 0
+        switcherLeaveTimer.stop()
+        switcherWindow.service.appSwitcherClosePending = false
+        switcherWindow.service.launchPinnedApp(appId)
+        pinnedAppLaunchTimer.start()
+    }
+
+    onPendingIconLaunchAppIdChanged: {
+        if (pendingIconLaunchAppId.length > 0) {
+            switcherLeaveTimer.stop()
+            service.appSwitcherClosePending = false
+        } else if (service.open && !containerHoverHandler.hovered) {
+            switcherLeaveTimer.restart()
+        }
+    }
+
+    function focusLaunchedPinnedApp() {
+        if (!pendingIconLaunchAppId) {
+            pinnedAppLaunchTimer.stop()
+            return
+        }
+        pendingIconLaunchAttempts++
+        switcherWindow.service.refresh()
+        var win = findWindowForPinnedApp(pendingIconLaunchAppId)
+        if (win) {
+            pendingIconFocusWindowId = String(win.id || "")
+            pendingIconLaunchAppId = ""
+            pinnedAppLaunchTimer.stop()
+            switcherWindow.service.focusWindow(win, true)
+            return
+        }
+        if (pendingIconLaunchAttempts >= 40) {
+            pendingIconLaunchAppId = ""
+            pinnedAppLaunchTimer.stop()
+        }
+    }
+
+    Timer {
+        id: pinnedAppLaunchTimer
+        interval: 250
+        repeat: true
+        onTriggered: switcherWindow.focusLaunchedPinnedApp()
+    }
+
     function resolveFocusChange() {
         var activeId = String(switcherWindow.service.activeWindowId || "")
         if (!switcherWindow.visible || !switcherWindow.service.open || !activeId) return
@@ -144,6 +246,11 @@ PanelWindow {
         interval: 500
         repeat: false
         onTriggered: {
+            if (switcherWindow.pendingSystemAction.length > 0 ||
+                    switcherWindow.pendingIconLaunchAppId.length > 0) {
+                switcherWindow.service.appSwitcherClosePending = false
+                return
+            }
             if (containerHoverHandler.hovered) {
                 switcherWindow.service.appSwitcherHovered = true
                 return
@@ -388,7 +495,8 @@ PanelWindow {
 
         Keys.onPressed: function(event) {
             if (event.key === Qt.Key_Escape) {
-                switcherWindow.service.closeSwitcher(true)
+                if (!switcherWindow.pendingSystemAction)
+                    switcherWindow.service.closeSwitcher(true)
                 event.accepted = true
             } else if (event.key === Qt.Key_G && (event.modifiers & Qt.ControlModifier)) {
                 switcherWindow.service.openGDictCalc("")
@@ -589,9 +697,7 @@ PanelWindow {
                                     if (eventPoint.position.x >= pinnedAppCard.width - 5 &&
                                             eventPoint.position.y >= 0 && eventPoint.position.y <= 8)
                                         return
-                                    switcherWindow.pendingIconFocusWindowId = ""
-                                    switcherWindow.pendingIconLaunchAppId = String(modelData.id || "")
-                                    switcherWindow.service.launchPinnedApp(modelData.id)
+                                    switcherWindow.beginPinnedAppLaunch(modelData.id)
                                 }
                             }
 
@@ -1235,19 +1341,19 @@ RowLayout {
                 }
 
                 SystemActionButton {
-                    service: switcherWindow.service
+                    onTriggered: switcherWindow.requestSystemAction(action)
                     action: "logout"
                     glyph: "⇥"
                 }
 
                 SystemActionButton {
-                    service: switcherWindow.service
+                    onTriggered: switcherWindow.requestSystemAction(action)
                     action: "reboot"
                     glyph: "↻"
                 }
 
                 SystemActionButton {
-                    service: switcherWindow.service
+                    onTriggered: switcherWindow.requestSystemAction(action)
                     action: "shutdown"
                     glyph: "⏻"
                 }
@@ -1309,9 +1415,75 @@ RowLayout {
     Component {
         id: compactShutdownButtonComponent
         SystemActionButton {
-            service: switcherWindow.service
+            onTriggered: switcherWindow.requestSystemAction(action)
             action: "shutdown"
             glyph: "⏻"
+        }
+    }
+
+    Rectangle {
+        id: systemActionDialog
+        anchors.fill: parent
+        z: 200
+        visible: switcherWindow.pendingSystemAction.length > 0
+        color: "#99080c16"
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {}
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(360, parent.width - 40)
+            height: dialogColumn.implicitHeight + 32
+            radius: 12
+            color: "#111722"
+            border.color: "#3b4a63"
+            border.width: 1
+
+            MouseArea { anchors.fill: parent; onClicked: {} }
+
+            ColumnLayout {
+                id: dialogColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 12
+
+                Text {
+                    Layout.fillWidth: true
+                    text: switcherWindow.systemActionLabel(switcherWindow.pendingSystemAction) + "?"
+                    color: "#f0f2fa"
+                    font.family: "JetBrainsMono Nerd Font Mono"
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Are you sure you want to " + switcherWindow.pendingSystemAction + "?"
+                    color: "#aab5c7"
+                    font.family: "JetBrainsMono Nerd Font Mono"
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 8
+
+                    ShellButton {
+                        text: "Cancel"
+                        onClicked: switcherWindow.cancelSystemAction()
+                    }
+
+                    ShellButton {
+                        text: switcherWindow.systemActionLabel(switcherWindow.pendingSystemAction)
+                        accent: true
+                        onClicked: switcherWindow.confirmSystemAction()
+                    }
+                }
+            }
         }
     }
 
@@ -1343,6 +1515,11 @@ RowLayout {
             id: containerHoverHandler
             onHoveredChanged: {
                 if (switcherWindow.controlsPointerFollowPending) return
+                if (switcherWindow.pendingSystemAction.length > 0) {
+                    switcherLeaveTimer.stop()
+                    switcherWindow.service.appSwitcherClosePending = false
+                    return
+                }
                 if (hovered) {
                     switcherLeaveTimer.stop()
                     switcherWindow.service.appSwitcherHovered = true
@@ -1468,6 +1645,62 @@ RowLayout {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: switcherWindow.service.openGDictCalc("")
+                    }
+                }
+
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    radius: 6
+                    color: clipboardMouse.containsMouse ? "#273650" : "#161d2a"
+                    border.color: clipboardMouse.containsMouse ? "#abc7ff" : "#2b364a"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "󰅍"
+                        color: clipboardMouse.containsMouse ? "#abc7ff" : "#8092ab"
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.pixelSize: 14
+                    }
+
+                    Rectangle {
+                        visible: switcherWindow.service.clipboardHistory.length > 0
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -4
+                        anchors.rightMargin: -5
+                        width: Math.max(12, clipboardCount.implicitWidth + 5)
+                        height: 12
+                        radius: 6
+                        color: "#abc7ff"
+                        border.color: "#111722"
+                        border.width: 1
+
+                        Text {
+                            id: clipboardCount
+                            anchors.centerIn: parent
+                            text: switcherWindow.service.clipboardHistory.length > 99
+                                ? "99+" : String(switcherWindow.service.clipboardHistory.length)
+                            color: "#111722"
+                            font.family: "JetBrainsMono Nerd Font Mono"
+                            font.pixelSize: 7
+                            font.weight: Font.DemiBold
+                        }
+                    }
+
+                    MouseArea {
+                        id: clipboardMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: switcherWindow.service.openClipboardManager()
+                        ShellToolTip {
+                            parent: clipboardMouse
+                            visible: clipboardMouse.containsMouse
+                            text: "Clipboard Manager · " + switcherWindow.service.clipboardHistory.length + " items"
+                        }
                     }
                 }
 

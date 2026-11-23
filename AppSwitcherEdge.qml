@@ -35,7 +35,6 @@ PanelWindow {
         hoverEnabled: true
         acceptedButtons: Qt.NoButton
         onEntered: {
-            if (edge.service.open) return
             edge.service.openSwitcher("bottom-center")
         }
     }

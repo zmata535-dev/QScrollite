@@ -30,6 +30,7 @@ ShellRoot {
         switcherService.qSysMonOpen = false
         switcherService.qNoteOpen = false
         switcherService.clipboardOpen = false
+        switcherService.qTextPickerOpen = false
         switcherService.closeCalendar(true)
         switcherService.clockOpenTimer.stop()
         switcherService.requestClockClose(true)
@@ -43,7 +44,7 @@ ShellRoot {
         enabled: root.wallpaperService.selectorOpen || notifications.notificationCenterOpen ||
             switcherService.open || switcherService.bluetoothOpen || switcherService.appMenuOpen ||
             switcherService.appMenuPending || switcherService.gDictCalcOpen || switcherService.qSysMonOpen ||
-            switcherService.clipboardOpen || switcherService.calendarOpen ||
+            switcherService.clipboardOpen || switcherService.qTextPickerOpen || switcherService.calendarOpen ||
             switcherService.calendarPending || switcherService.clockOpen || switcherService.compactClockOpen ||
             switcherService.compactClockPending || switcherService.idleConfigOpen
         onActivated: root.closeAllShellPanels()
@@ -192,6 +193,22 @@ ShellRoot {
     }
 
     LazyLoader {
+        active: switcherService.qTextPickerOpen
+
+        QTextPicker {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: switcherService.qTextPickerCapturing
+
+        QTextPickerCaptureCancel {
+            service: switcherService
+        }
+    }
+
+    LazyLoader {
         active: switcherService.calendarOpen
 
         Calendar {
@@ -285,6 +302,14 @@ ShellRoot {
         function toggleDnd(): string {
             notifications.toggleDnd();
             return notifications.doNotDisturb ? "Do Not Disturb on" : "Do Not Disturb off";
+        }
+
+        function toggleCenter(): string {
+            if (notifications.notificationCenterOpen)
+                notifications.closeCenter();
+            else
+                notifications.openCenter();
+            return notifications.notificationCenterOpen ? "open" : "closed";
         }
     }
 
@@ -423,6 +448,15 @@ ShellRoot {
         function close(): void {
             switcherService.gDictCalcOpen = false;
         }
+
+        function toggle(): string {
+            if (switcherService.gDictCalcOpen) {
+                switcherService.gDictCalcOpen = false;
+            } else {
+                switcherService.openGDictCalc("");
+            }
+            return switcherService.gDictCalcOpen ? "open" : "closed";
+        }
     }
 
     IpcHandler {
@@ -466,6 +500,47 @@ ShellRoot {
 
         function close(): void {
             switcherService.clipboardOpen = false;
+        }
+
+        function toggle(): string {
+            if (switcherService.clipboardOpen)
+                switcherService.clipboardOpen = false;
+            else
+                switcherService.openClipboardManager();
+            return switcherService.clipboardOpen ? "open" : "closed";
+        }
+    }
+
+    IpcHandler {
+        target: "qtextpicker"
+
+        function open(): void {
+            switcherService.openQTextPicker();
+        }
+
+        function close(): void {
+            switcherService.qTextPickerOpen = false;
+        }
+
+        function toggle(): string {
+            if (switcherService.qTextPickerCapturing) {
+                switcherService.cancelScreenTextCapture();
+            } else if (switcherService.qTextPickerOpen) {
+                switcherService.qTextPickerOpen = false;
+            } else {
+                switcherService.openQTextPicker();
+            }
+            return switcherService.qTextPickerOpen || switcherService.qTextPickerCapturing
+                ? "open" : "closed";
+        }
+
+        function status(): string {
+            return JSON.stringify({
+                open: switcherService.qTextPickerOpen,
+                capturing: switcherService.qTextPickerCapturing,
+                resultLength: switcherService.qTextPickerResult.length,
+                status: switcherService.qTextPickerStatus
+            }, null, 2);
         }
     }
 

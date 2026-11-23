@@ -125,6 +125,10 @@ PanelWindow {
                     }
                     Item { Layout.fillWidth: true }
                     ShellButton {
+                        text: "Capture text"
+                        onClicked: root.service.openQTextPicker()
+                    }
+                    ShellButton {
                         text: "Clear"
                         enabled: root.service.clipboardHistory.length > 0
                         onClicked: root.service.clearClipboardHistory()

@@ -5,9 +5,9 @@ import Quickshell
 Item {
     id: root
 
-    required property var service
     required property string action
     required property string glyph
+    signal triggered()
 
     implicitWidth: 24
     implicitHeight: 24
@@ -36,7 +36,7 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.service.runSystemAction(root.action)
+            onClicked: root.triggered()
             ShellToolTip {
                 parent: mouse
                 visible: mouse.containsMouse

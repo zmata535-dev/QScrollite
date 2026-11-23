@@ -21,6 +21,9 @@ Commands:
   calendar [toggle|open|close]
       Toggle or control the calendar card (default: toggle)
 
+  qtextpicker [toggle|open|close]
+      Toggle or control the screen text picker (default: toggle)
+
   clock [open|compact|close|activity|status]
       Control the idle clock card or show its compact form
 
@@ -81,6 +84,16 @@ case "$cmd" in
             open)   "$QS_BIN" ipc call calendar open ;;
             close)  "$QS_BIN" ipc call calendar close ;;
             *) echo "Unknown calendar action: $action" >&2; exit 1 ;;
+        esac
+        ;;
+
+    qtextpicker)
+        action="${2:-toggle}"
+        case "$action" in
+            toggle) "$QS_BIN" ipc call qtextpicker toggle ;;
+            open) "$QS_BIN" ipc call qtextpicker open ;;
+            close) "$QS_BIN" ipc call qtextpicker close ;;
+            *) echo "Unknown qtextpicker action: $action" >&2; exit 1 ;;
         esac
         ;;
 

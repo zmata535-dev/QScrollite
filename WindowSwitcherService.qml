@@ -46,6 +46,11 @@ QtObject {
     property alias qNoteInitialized: qNoteStore.initialized
     property bool qNoteStorageReady: false
     property bool clipboardOpen: false
+    property bool qTextPickerOpen: false
+    property bool qTextPickerCapturing: false
+    property bool qTextPickerCancelRequested: false
+    property string qTextPickerResult: ""
+    property string qTextPickerStatus: "Select a screen region to extract text."
     property alias clipboardHistory: clipboardHistoryStore.history
     property bool clipboardStorageReady: false
     property bool calendarOpen: false
@@ -279,6 +284,32 @@ QtObject {
         JsonAdapter {
             id: clipboardHistoryStore
             property var history: []
+        }
+    }
+
+    property var qTextPickerCaptureProcess: Process {
+        id: qTextPickerCaptureProcess
+        command: [(Quickshell.env("HOME") || "") + "/.config/quickshell/bin/qtextpicker-capture"]
+        running: false
+        stdout: StdioCollector { id: qTextPickerCaptureOutput }
+        stderr: StdioCollector { id: qTextPickerCaptureError }
+        onExited: function(exitCode) {
+            service.qTextPickerCapturing = false
+            service.qTextPickerOpen = true
+            if (service.qTextPickerCancelRequested) {
+                service.qTextPickerCancelRequested = false
+                service.qTextPickerStatus = "Selection cancelled."
+                return
+            }
+            if (exitCode === 0) {
+                service.qTextPickerResult = String(qTextPickerCaptureOutput.text || "").trim()
+                service.qTextPickerStatus = service.qTextPickerResult
+                    ? "Text captured. Review it, then copy if needed."
+                    : "No text detected. " + String(qTextPickerCaptureError.text || "")
+            } else {
+                service.qTextPickerStatus = String(qTextPickerCaptureError.text || "").trim()
+                    || (exitCode === 130 ? "Selection cancelled." : "Text capture failed.")
+            }
         }
     }
 
@@ -630,24 +661,31 @@ QtObject {
             var wasEmpty = activeWorkspaceEmpty;
             activeWorkspaceEmpty = false;
             lastEmptyWorkspaceKey = "";
-            if (wasEmpty && pendingEmptyWorkspaceClose.length > 0) {
-                var pendingClose = pendingEmptyWorkspaceClose;
-                pendingEmptyWorkspaceClose = "";
-                if (pendingClose === "switcher") closeSwitcher(true, true);
-                else if (pendingClose === "clock") requestClockClose(true);
-                else if (pendingClose === "calendar") closeCalendar(true);
+            pendingEmptyWorkspaceClose = "";
+            if (wasEmpty) {
+                if (emptyWorkspaceAction === "switcher") closeSwitcher(true, true);
+                else if (emptyWorkspaceAction === "clock") requestClockClose(true);
+                else if (emptyWorkspaceAction === "calendar") closeCalendar(true);
             }
             return;
         }
         activeWorkspaceEmpty = true;
 
         var key = activeCompositor + ":" + activeWorkspaceId;
-        if (lastEmptyWorkspaceKey === key) return;
-        lastEmptyWorkspaceKey = key;
+        var moduleAlreadyOpenOrPending =
+            (emptyWorkspaceAction === "switcher" && open) ||
+            (emptyWorkspaceAction === "clock" && (clockOpen || clockOpenTimer.running)) ||
+            (emptyWorkspaceAction === "calendar" && (calendarOpen || calendarPending || calendarTimer.running));
+        if (lastEmptyWorkspaceKey === key && moduleAlreadyOpenOrPending) return;
 
-        if (open || appMenuOpen || appMenuPending || gDictCalcOpen || qSysMonOpen || calendarOpen || calendarPending ||
-                clockOpen || idleConfigOpen || compactClockOpen || compactClockPending)
+        if (appMenuOpen || appMenuPending || gDictCalcOpen || qSysMonOpen || calendarOpen || calendarPending ||
+                clockOpen || clockOpenTimer.running || calendarTimer.running || idleConfigOpen || compactClockOpen || compactClockPending)
             return;
+
+        if (emptyWorkspaceAction !== "switcher" && open)
+            closeSwitcher(true, true);
+
+        lastEmptyWorkspaceKey = key;
 
         if (emptyWorkspaceAction === "clock")
             openClock(true);
@@ -689,7 +727,7 @@ QtObject {
         interval: service.open || service.emptyWorkspaceAction !== "none" ? 500 : 5000
         repeat: true
         running: (service.open || service.clockOpen || service.emptyWorkspaceAction !== "none") &&
-            (service.activeCompositor !== "hyprland" || !hyprlandEventSocket.connected)
+            (service.emptyWorkspaceAction !== "none" || service.activeCompositor !== "hyprland" || !hyprlandEventSocket.connected)
         onTriggered: {
             service.refresh();
         }
@@ -1814,7 +1852,50 @@ QtObject {
         if (clockOpen) requestClockClose();
         idleConfigOpen = false;
         if (wallpaperService) wallpaperService.closeSelector();
+        qTextPickerOpen = false;
         clipboardOpen = true;
+    }
+
+    function openQTextPicker() {
+        cancelCompactClockForAppPanels();
+        closeSwitcher(true);
+        appMenuTimer.stop();
+        appMenuPending = false;
+        appMenuOpen = false;
+        gDictCalcOpen = false;
+        qSysMonOpen = false;
+        qNoteOpen = false;
+        clipboardOpen = false;
+        closeCalendar(true);
+        clockOpenTimer.stop();
+        if (clockOpen) requestClockClose(true);
+        idleConfigOpen = false;
+        if (wallpaperService) wallpaperService.closeSelector();
+        raisedCardModule = "qtextpicker";
+        qTextPickerOpen = true;
+    }
+
+    function captureScreenText() {
+        if (qTextPickerCaptureProcess.running) return;
+        qTextPickerResult = "";
+        qTextPickerStatus = "Select a screen region…";
+        qTextPickerCancelRequested = false;
+        qTextPickerCapturing = true;
+        qTextPickerOpen = false;
+        qTextPickerCaptureProcess.running = true;
+    }
+
+    function cancelScreenTextCapture() {
+        if (!qTextPickerCaptureProcess.running) return;
+        qTextPickerCancelRequested = true;
+        qTextPickerStatus = "Cancelling selection…";
+        qTextPickerCaptureProcess.running = false;
+    }
+
+    function copyQTextPickerResult() {
+        if (!qTextPickerResult) return;
+        Quickshell.clipboardText = qTextPickerResult;
+        qTextPickerStatus = "Copied to clipboard.";
     }
 
     function copyClipboardHistoryItem(text) {
