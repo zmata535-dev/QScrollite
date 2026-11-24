@@ -40,6 +40,7 @@ QtObject {
     property string gDictCalcInitialQuery: ""
     property bool qSysMonOpen: false
     property bool qNoteOpen: false
+    property string pendingClipboardNoteText: ""
     property alias qNoteNotes: qNoteStore.notes
     property alias qNoteCurrentIndex: qNoteStore.currentIndex
     property alias qNoteLegacyText: qNoteStore.noteText
@@ -1014,6 +1015,11 @@ QtObject {
         open = true;
     }
 
+    function toggleBottomSwitcher() {
+        if (open) closeSwitcher(true);
+        else openSwitcher("bottom-center");
+    }
+
     function refreshNetwork() {
         if (!networkReadProcess.running) networkReadProcess.running = true
     }
@@ -1901,6 +1907,17 @@ QtObject {
     function copyClipboardHistoryItem(text) {
         Quickshell.clipboardText = String(text || "");
         clipboardOpen = false;
+    }
+
+    function moveClipboardHistoryItemToNote(text) {
+        var value = String(text || "");
+        if (!value.length) return;
+
+        pendingClipboardNoteText = value;
+        clipboardHistory = clipboardHistory.filter(function(item) { return item !== value; });
+        if (clipboardStorageReady) clipboardHistoryFile.writeAdapter();
+        clipboardOpen = false;
+        openQNote();
     }
 
     function clearClipboardHistory() {

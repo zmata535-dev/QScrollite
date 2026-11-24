@@ -83,9 +83,10 @@ QtObject {
         switcherService.openSwitcher();
     }
 
-    function showQNote() {
-        if (!enabled || !switcherService || switcherService.qNoteOpen) return;
-        switcherService.openQNote();
+    function toggleQNote() {
+        if (!enabled || !switcherService) return;
+        if (switcherService.qNoteOpen) switcherService.closeQNote();
+        else switcherService.openQNote();
     }
 
     function triggerCorner(corner, screenName) {
@@ -115,7 +116,7 @@ QtObject {
         } else if (corner === "top-left") {
             if (now - lastTriggerTL < cd) return false;
             lastTriggerTL = now;
-            showQNote();
+            toggleQNote();
             cornerTriggered("top-left", screenName || "");
             return true;
         }

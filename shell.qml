@@ -329,7 +329,7 @@ ShellRoot {
                     bottom_right: "switch focus right",
                     bottom_left: "switch focus left",
                     top_right: "center focused",
-                    top_left: "app switcher"
+                    top_left: "toggle QNote"
                 }
             }, null, 2);
         }

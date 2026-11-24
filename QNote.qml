@@ -30,6 +30,8 @@ PanelWindow {
     property var focusedNoteField: null
     property var noteItems: []
     readonly property int cornerRadius: 8
+    readonly property string clipboardNoteColor: "#CEC8A3"
+    readonly property real clipboardNoteOpacity: 0.69
     readonly property var pastelPalette: [
         { name: "Blue", color: "#3F536B" },
         { name: "Lavender", color: "#554B68" },
@@ -50,6 +52,23 @@ PanelWindow {
                        parseInt(value.slice(2, 4), 16) / 255,
                        parseInt(value.slice(4, 6), 16) / 255,
                        0.92)
+    }
+
+    function noteCardBackground(color) {
+        if (color === clipboardNoteColor) {
+            var pastel = Qt.darker(color, 1.0)
+            return Qt.rgba(pastel.r, pastel.g, pastel.b, clipboardNoteOpacity)
+        }
+        return Qt.darker(color, 1.35)
+    }
+
+    function noteFieldBackground(color) {
+        return color === clipboardNoteColor ? "transparent" : Qt.darker(color, 1.35)
+    }
+
+    function noteControlBackground(color, controlsVisible, hovered, idle) {
+        if (!controlsVisible && color === clipboardNoteColor) return "transparent"
+        return Qt.darker(color, idle || !controlsVisible ? 1.35 : (hovered ? 1.9 : 1.6))
     }
 
     function setNoteFieldFocus(field, focused) {
@@ -92,11 +111,12 @@ PanelWindow {
                 if (pastelPalette[i].color === color) colorIndex = i
             if (colorIndex < 0) colorIndex = previousPalette.indexOf(color)
             if (colorIndex < 0) colorIndex = legacyLightPalette.indexOf(color)
-            if (colorIndex < 0) colorIndex = 0
+            if (colorIndex >= 0) color = pastelPalette[colorIndex].color
+            else if (!/^#[0-9a-fA-F]{6}$/.test(color)) color = pastelPalette[0].color
             return {
                 title: String(note.title || ("Note " + (index + 1))),
                 text: String(note.text || ""),
-                color: pastelPalette[colorIndex].color
+                color: color
             }
         })
         service.qNoteCurrentIndex = noteItems.length
@@ -154,6 +174,35 @@ PanelWindow {
         })
     }
 
+    function addClipboardNote(text) {
+        var updated = noteItems.slice(0)
+        updated.push({
+            title: "Clipboard note",
+            text: String(text || ""),
+            color: clipboardNoteColor
+        })
+        noteItems = updated
+        service.qNoteCurrentIndex = updated.length - 1
+        openPresetMenuIndex = -1
+        saveNotes()
+        service.flushQNoteSave()
+        var newIndex = updated.length - 1
+        Qt.callLater(function() {
+            noteList.positionViewAtEnd()
+            Qt.callLater(function() {
+                var newCard = noteList.itemAtIndex(newIndex)
+                if (newCard) newCard.focusText()
+            })
+        })
+    }
+
+    function consumePendingClipboardNote() {
+        if (!service.qNoteInitialized || !service.pendingClipboardNoteText.length) return
+        var text = service.pendingClipboardNoteText
+        service.pendingClipboardNoteText = ""
+        addClipboardNote(text)
+    }
+
     function deleteNote(index) {
         if (index < 0 || index >= noteItems.length) return
         var updated = noteItems.slice(0)
@@ -203,6 +252,9 @@ PanelWindow {
 
     Connections {
         target: root.service
+        function onPendingClipboardNoteTextChanged() {
+            Qt.callLater(function() { root.consumePendingClipboardNote() })
+        }
         function onActiveWindowIdChanged() {
             root.repositionAfterSwitcher()
         }
@@ -241,6 +293,7 @@ PanelWindow {
 
     Component.onCompleted: {
         ensureNotes()
+        consumePendingClipboardNote()
         openFromOppositeSide()
     }
 
@@ -394,8 +447,8 @@ PanelWindow {
                     height: 26 + Math.max(minimumBodyHeight, noteEditor.contentHeight)
                     radius: root.cornerRadius
                     z: presetMenuOpen ? 10 : 0
-                    color: Qt.darker(modelData.color, 1.35)
-                    border.color: Qt.darker(modelData.color, 1.35)
+                    color: root.noteCardBackground(modelData.color)
+                    border.color: root.noteCardBackground(modelData.color)
                     border.width: 1
                     readonly property bool noteControlsVisible:
                         noteCardHover.hovered || presetMenuOpen
@@ -535,8 +588,10 @@ PanelWindow {
                                 font.pixelSize: 10
                                 placeholderText: "Note title"
                                 text: noteItemCard.modelData.title || ""
+                                color: noteItemCard.modelData.color === root.clipboardNoteColor
+                                    ? "#36352d" : "#e5ebf4"
                                 background: Rectangle {
-                                    color: Qt.darker(noteItemCard.modelData.color, 1.35)
+                                    color: root.noteFieldBackground(noteItemCard.modelData.color)
                                     radius: root.cornerRadius
                                     bottomLeftRadius: 0
                                     bottomRightRadius: 0
@@ -563,15 +618,15 @@ PanelWindow {
                                     for (var i = 0; i < root.pastelPalette.length; i++)
                                         if (root.pastelPalette[i].color === noteItemCard.modelData.color)
                                             return root.pastelPalette[i].name
-                                    return root.pastelPalette[1].name
+                                    return noteItemCard.modelData.color === root.clipboardNoteColor
+                                        ? "Clipboard" : "Custom"
                                 }
                                 opacity: 1
                                 enabled: true
                                 background: Rectangle {
                                     radius: root.cornerRadius
-                                    color: Qt.darker(noteItemCard.modelData.color,
-                                        !noteItemCard.noteControlsVisible ? 1.35
-                                        : (noteColorButton.hovered ? 1.9 : 1.6))
+                                    color: root.noteControlBackground(noteItemCard.modelData.color,
+                                        noteItemCard.noteControlsVisible, noteColorButton.hovered, false)
                                     border.width: 0
                                 }
                                 contentItem: Text {
@@ -603,9 +658,8 @@ PanelWindow {
                                     enabled: noteItemCard.noteControlsVisible && noteEditor.activeFocus
                                     background: Rectangle {
                                         radius: root.cornerRadius
-                                        color: Qt.darker(noteItemCard.modelData.color,
-                                            !noteItemCard.noteControlsVisible ? 1.35
-                                            : (parent.hovered ? 1.9 : 1.6))
+                                        color: root.noteControlBackground(noteItemCard.modelData.color,
+                                            noteItemCard.noteControlsVisible, parent.hovered, false)
                                         border.width: 0
                                     }
                                     contentItem: Text {
@@ -634,10 +688,9 @@ PanelWindow {
                                     noteEditor.text !== noteItemCard.initialText
                                 background: Rectangle {
                                     radius: root.cornerRadius
-                                    color: Qt.darker(noteItemCard.modelData.color,
-                                        !noteItemCard.noteControlsVisible ||
-                                            noteEditor.text === noteItemCard.initialText ? 1.35
-                                            : (noteUndoButton.hovered ? 1.9 : 1.6))
+                                    color: root.noteControlBackground(noteItemCard.modelData.color,
+                                        noteItemCard.noteControlsVisible, noteUndoButton.hovered,
+                                        noteEditor.text === noteItemCard.initialText)
                                     border.width: 0
                                 }
                                 contentItem: Text {
@@ -668,9 +721,8 @@ PanelWindow {
                                 enabled: noteItemCard.noteControlsVisible
                                 background: Rectangle {
                                     radius: root.cornerRadius
-                                    color: Qt.darker(noteItemCard.modelData.color,
-                                        !noteItemCard.noteControlsVisible ? 1.35
-                                        : (noteDeleteButton.hovered ? 1.9 : 1.6))
+                                    color: root.noteControlBackground(noteItemCard.modelData.color,
+                                        noteItemCard.noteControlsVisible, noteDeleteButton.hovered, false)
                                     border.width: 0
                                 }
                                 contentItem: Text {
@@ -700,7 +752,8 @@ PanelWindow {
                             }
                             text: noteItemCard.modelData.text || ""
                             placeholderText: "Write a note…"
-                            color: "#e5ebf4"
+                            color: noteItemCard.modelData.color === root.clipboardNoteColor
+                                ? "#36352d" : "#e5ebf4"
                             selectionColor: "#809ac0"
                             selectedTextColor: "#ffffff"
                             wrapMode: TextEdit.Wrap
@@ -708,7 +761,7 @@ PanelWindow {
                             font.pixelSize: 11
                             padding: 0
                             background: Rectangle {
-                                color: Qt.darker(noteItemCard.modelData.color, 1.35)
+                                color: root.noteFieldBackground(noteItemCard.modelData.color)
                                 radius: root.cornerRadius
                                 border.width: 0
                             }

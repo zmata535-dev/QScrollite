@@ -14,9 +14,11 @@ PanelWindow {
     visible: service.clipboardOpen
     color: "transparent"
     anchors { top: true; bottom: true; left: true; right: true }
+    exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: service.raisedCardModule === "clipboard" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-clipboard-manager"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    mask: Region { Region { item: card } }
     property real cardX: -600
     property real openTargetX: 12
 
@@ -77,6 +79,13 @@ PanelWindow {
         service.clipboardOpen = false
     }
 
+    Shortcut {
+        sequence: "Escape"
+        context: Qt.ApplicationShortcut
+        enabled: root.visible
+        onActivated: root.close()
+    }
+
     function previewText(value) {
         return String(value || "").replace(/\r\n/g, "\n").replace(/\n/g, "  ↵  ")
     }
@@ -91,7 +100,7 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.min(560, root.width - 32)
+            width: Math.min(560, root.width - 32) * 0.6
             height: Math.min(620, root.height - 64)
             x: root.cardX
             y: (parent.height - height) / 2
@@ -101,6 +110,13 @@ PanelWindow {
             border.width: 1
             focus: true
 
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onPressedChanged: {
+                    if (pressed) root.service.raiseCardModule("clipboard")
+                }
+            }
+
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Escape) {
                     root.close()
@@ -108,7 +124,10 @@ PanelWindow {
                 }
             }
 
-            MouseArea { anchors.fill: parent; onClicked: {} }
+            MouseArea {
+                anchors.fill: parent
+                onPressed: root.service.raiseCardModule("clipboard")
+            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -124,6 +143,12 @@ PanelWindow {
                         font.pixelSize: 17
                     }
                     Item { Layout.fillWidth: true }
+                    ShellButton { text: "×"; onClicked: root.close() }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
                     ShellButton {
                         text: "Capture text"
                         onClicked: root.service.openQTextPicker()
@@ -133,7 +158,7 @@ PanelWindow {
                         enabled: root.service.clipboardHistory.length > 0
                         onClicked: root.service.clearClipboardHistory()
                     }
-                    ShellButton { text: "×"; onClicked: root.close() }
+                    Item { Layout.fillWidth: true }
                 }
 
                 Text {
@@ -157,7 +182,7 @@ PanelWindow {
                     delegate: Rectangle {
                         required property string modelData
                         width: historyList.width
-                        height: Math.max(48, Math.min(90, contentText.implicitHeight + 18))
+                        height: Math.max(48, contentText.implicitHeight + 12)
                         radius: 7
                         color: itemMouse.containsMouse ? "#202a3a" : "#161d2a"
                         border.color: itemMouse.containsMouse ? "#abc7ff" : "#2b364a"
@@ -165,27 +190,80 @@ PanelWindow {
                         Text {
                             id: contentText
                             anchors.fill: parent
-                            anchors.margins: 10
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 42
+                            anchors.topMargin: 6
+                            anchors.bottomMargin: 6
                             text: root.previewText(modelData)
                             color: "#dce5f2"
                             font.family: "JetBrainsMono Nerd Font Mono"
                             font.pixelSize: 11
                             wrapMode: Text.WrapAnywhere
-                            maximumLineCount: 4
-                            elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         MouseArea {
                             id: itemMouse
-                            anchors.fill: parent
+                            anchors.fill: contentText
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: root.service.copyClipboardHistoryItem(modelData)
                         }
+
+                        ShellButton {
+                            id: moveToNoteButton
+                            anchors.right: parent.right
+                            anchors.rightMargin: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 28
+                            height: 24
+                            text: "➜▤"
+                            leftPadding: 1
+                            rightPadding: 1
+                            font.family: "DejaVu Sans"
+                            font.pixelSize: 12
+                            onClicked: root.service.moveClipboardHistoryItemToNote(modelData)
+
+                            ShellToolTip {
+                                parent: moveToNoteButton
+                                visible: moveToNoteButton.hovered
+                                text: "Move to Note"
+                            }
+                        }
                     }
 
-                    ScrollBar.vertical: ScrollBar { }
+                    ScrollBar.vertical: ScrollBar {
+                        parent: historyList
+                        anchors.top: historyList.top
+                        anchors.right: historyList.right
+                        anchors.bottom: historyList.bottom
+                    }
+
+                    Rectangle {
+                        anchors.top: historyList.top
+                        anchors.left: historyList.left
+                        anchors.right: historyList.right
+                        height: 14
+                        z: 2
+                        visible: historyList.contentY > 1
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "#ee111722" }
+                            GradientStop { position: 1; color: "#00111722" }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.bottom: historyList.bottom
+                        anchors.left: historyList.left
+                        anchors.right: historyList.right
+                        height: 14
+                        z: 2
+                        visible: historyList.contentY + historyList.height < historyList.contentHeight - 1
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "#00111722" }
+                            GradientStop { position: 1; color: "#ee111722" }
+                        }
+                    }
 
                     Text {
                         anchors.centerIn: parent

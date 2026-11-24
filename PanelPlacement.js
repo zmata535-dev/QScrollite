@@ -13,7 +13,8 @@ function focusedWindowIsLeft(service, screenX, screenWidth) {
         for (var j = 0; j < windows.length; j++) {
             var window = windows[j]
             if (String(window.id) !== activeId) continue
-            return Number(window.x || 0) < Number(screenX || 0) + Number(screenWidth || 0) / 2
+            var windowCenterX = Number(window.x || 0) + Number(window.width || 0) / 2
+            return windowCenterX < Number(screenX || 0) + Number(screenWidth || 0) / 2
         }
     }
     return false
