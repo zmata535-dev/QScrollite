@@ -188,6 +188,22 @@ PanelWindow {
         pinnedAppLaunchTimer.start()
     }
 
+    function beginAppWindowLaunch(win) {
+        if (!win) return
+        var entry = switcherWindow.service.appEntryForWindow(win)
+        if (!entry || !entry.id) {
+            switcherWindow.service.launchAppForWindow(win)
+            return
+        }
+        pendingIconFocusWindowId = ""
+        pendingIconLaunchAppId = switcherWindow.service.normalizedDesktopEntryId(entry.id)
+        pendingIconLaunchAttempts = 0
+        switcherLeaveTimer.stop()
+        switcherWindow.service.appSwitcherClosePending = false
+        switcherWindow.service.launchAppForWindow(win)
+        pinnedAppLaunchTimer.start()
+    }
+
     onPendingIconLaunchAppIdChanged: {
         if (pendingIconLaunchAppId.length > 0) {
             switcherLeaveTimer.stop()
@@ -909,6 +925,9 @@ PanelWindow {
                                                     switcherWindow.pendingIconFocusWindowId = String(modelData.id || "")
                                                     switcherWindow.pendingIconLaunchAppId = ""
                                                     switcherWindow.service.focusWindow(modelData, true)
+                                                }
+                                                onDoubleTapped: function(eventPoint, button) {
+                                                    switcherWindow.beginAppWindowLaunch(modelData)
                                                 }
                                             }
 
