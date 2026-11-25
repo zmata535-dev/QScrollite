@@ -25,10 +25,10 @@ PanelWindow {
 
     WlrLayershell.layer: service.raisedCardModule === "gdictcalc" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-gdictcalc"
-    WlrLayershell.keyboardFocus: visible && focusedInput &&
-        (cardHover.hovered || comboPopupOpen || focusedInput === calcField)
-        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    mask: Region { item: card }
+    WlrLayershell.keyboardFocus: visible &&
+        ((focusedInput && cardHover.hovered) || comboPopupOpen)
+        ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    mask: Region { Region { item: card } }
     property real cardX: -500
     property real openTargetX: 12
     property string focusAtOpen: ""
@@ -140,6 +140,12 @@ PanelWindow {
         enabled: root.visible
         onActivated: root.openWebSearch()
     }
+    Shortcut {
+        sequence: "Ctrl+L"
+        context: Qt.WindowShortcut
+        enabled: root.visible && !root.dictionaryMode
+        onActivated: root.showDetectedColor()
+    }
 
     property bool dictionaryMode: false
     property bool definitionRequested: false
@@ -155,6 +161,8 @@ PanelWindow {
     property string dictionaryPhonetic: ""
     property var dictionaryMeanings: []
     property bool weatherResult: false
+    property bool colorResult: false
+    property string detectedColor: ""
     property bool dictionaryApiResult: false
     property bool searching: false
     property int googleSearchGeneration: 0
@@ -387,6 +395,7 @@ PanelWindow {
             event.accepted = true
         } else if (event.key === Qt.Key_D && (event.modifiers & Qt.ControlModifier)) {
             root.dictionaryMode = false
+            root.colorResult = false
             root.statusText = ""
             Qt.callLater(function() { calcField.forceActiveFocus() })
             event.accepted = true
@@ -412,6 +421,42 @@ PanelWindow {
     function copyResult() {
         if (!googleResultText) return
         Quickshell.execDetached(["bash", "-c", "printf '%s' \"$1\" | wl-copy", "gdictcalc-copy-result", googleResultText])
+    }
+
+    function findColorInText(value) {
+        var matches = String(value || "").match(/#[0-9a-fA-F]{3,8}(?![0-9a-fA-F])|[a-zA-Z]+/g) || []
+        for (var i = 0; i < matches.length; i++) {
+            var candidate = matches[i]
+            if (candidate.charAt(0) === "#" && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(candidate))
+                continue
+            var parsed = Qt.color(candidate)
+            if (parsed && parsed.valid) return candidate
+        }
+        return ""
+    }
+
+    function showDetectedColor() {
+        var found = findColorInText(expression)
+        if (!found) {
+            colorResult = false
+            weatherResult = false
+            dictionaryApiResult = false
+            dictionaryMode = true
+            googleResultTitle = "Color"
+            googleResultText = ""
+            statusText = "No color found. Try a color name or hex value, such as blue or #89a9ff."
+            return
+        }
+        detectedColor = found
+        colorResult = true
+        weatherResult = false
+        dictionaryApiResult = false
+        definitionRequested = false
+        translationRequested = false
+        dictionaryMode = true
+        statusText = ""
+        googleResultTitle = "Color detected from your text"
+        googleResultText = ""
     }
 
     function formatDefinitions(word, phonetic, meanings) {
@@ -449,6 +494,7 @@ PanelWindow {
         }
 
         var sourceLanguage = languageFrom.currentText
+        colorResult = false
         var targetLanguage = fallbackToEnglish === true ? "English" : languageSelect.currentText
         var sameLanguage = sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()
         googleSearchSourceLanguage = sourceLanguage
@@ -520,6 +566,7 @@ PanelWindow {
         var requestedPlace = expression.trim()
         var place = requestedPlace || String(service.localWeatherLocation || "Jakarta").trim()
         weatherResult = true
+        colorResult = false
         dictionaryApiResult = false
         definitionRequested = false
         translationRequested = false
@@ -571,7 +618,7 @@ PanelWindow {
         Rectangle {
             id: card
             width: Math.max(0, Math.min(480, root.width - 24) * root.widthScale)
-            height: Math.min(content.implicitHeight + 24, root.height - 48)
+            height: Math.min(content.implicitHeight + 30, root.height - 48)
             x: root.cardX
             y: (parent.height - height) / 2
             radius: 14
@@ -619,6 +666,7 @@ PanelWindow {
                     Item { Layout.fillWidth: true }
 
                     ShellButton {
+                        font.pixelSize: 10
                         focusPolicy: Qt.NoFocus
                         visible: root.dictionaryMode
                         text: "<< Question"
@@ -630,6 +678,7 @@ PanelWindow {
                             root.lastGoogleUrl = ""
                             root.googleResultTitle = ""
                             root.googleResultText = ""
+                            root.colorResult = false
                             Qt.callLater(function() {
                                 root.focusSearchBox()
                             })
@@ -637,6 +686,7 @@ PanelWindow {
                     }
 
                     ShellButton {
+                        font.pixelSize: 10
                         focusPolicy: Qt.NoFocus
                         text: "×"
                         onClicked: root.close()
@@ -661,17 +711,26 @@ PanelWindow {
                         Keys.onPressed: function(event) { root.handleShortcut(event) }
 
                         ShellButton {
+                            id: searchClearButton
+                            font.pixelSize: 13
                             focusPolicy: Qt.NoFocus
                             anchors.right: parent.right
-                            anchors.rightMargin: 4 * root.widthScale
+                            anchors.rightMargin: 3
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 28 * root.widthScale
-                            height: 24
+                            width: 22
+                            height: 22
+                            leftPadding: 0
+                            rightPadding: 0
                             visible: calcField.text.length > 0
-                            text: "󰃣"
+                            text: "󰃢"
                             onClicked: {
                                 root.expression = ""
                                 calcField.forceActiveFocus()
+                            }
+                            ShellToolTip {
+                                parent: searchClearButton
+                                visible: searchClearButton.hovered
+                                text: "Clear search text"
                             }
                         }
                     }
@@ -684,6 +743,7 @@ PanelWindow {
                         ShellComboBox {
                             id: languageFrom
                             Layout.fillWidth: true
+                            font.pixelSize: 10
                             model: root.languages
                             currentIndex: 0
                             onActiveFocusChanged: root.setInputFocus(languageFrom, activeFocus)
@@ -692,9 +752,42 @@ PanelWindow {
                         ShellComboBox {
                             id: languageSelect
                             Layout.fillWidth: true
+                            font.pixelSize: 10
                             model: root.languages
                             currentIndex: 1
                             onActiveFocusChanged: root.setInputFocus(languageSelect, activeFocus)
+                        }
+                        ShellButton {
+                            id: sameLanguageButton
+                            focusPolicy: Qt.NoFocus
+                            Layout.preferredWidth: 24
+                            implicitHeight: 22
+                            font.pixelSize: 16
+                            text: "="
+                            onClicked: languageSelect.currentIndex = languageFrom.currentIndex
+                            ShellToolTip {
+                                parent: sameLanguageButton
+                                visible: sameLanguageButton.hovered
+                                text: "Use the same language for both options"
+                            }
+                        }
+                        ShellButton {
+                            id: swapLanguagesButton
+                            focusPolicy: Qt.NoFocus
+                            Layout.preferredWidth: 28
+                            implicitHeight: 22
+                            font.pixelSize: 12
+                            text: "⇄"
+                            onClicked: {
+                                var sourceIndex = languageFrom.currentIndex
+                                languageFrom.currentIndex = languageSelect.currentIndex
+                                languageSelect.currentIndex = sourceIndex
+                            }
+                            ShellToolTip {
+                                parent: swapLanguagesButton
+                                visible: swapLanguagesButton.hovered
+                                text: "Swap source and target languages"
+                            }
                         }
                     }
 
@@ -705,7 +798,10 @@ PanelWindow {
                         Text { text: "Convert"; color: "#94a3b8"; font.pixelSize: 11 }
                         ShellComboBox {
                             id: convertCategory
+                            Layout.fillWidth: true
                             Layout.preferredWidth: 125 * root.widthScale
+                            Layout.minimumWidth: 0
+                            font.pixelSize: 10
                             model: ["Currencies", "Length", "Weight", "Tech units", "Custom"]
                             onActivated: targetSelect.currentIndex = 0
                             onActiveFocusChanged: root.setInputFocus(convertCategory, activeFocus)
@@ -713,6 +809,9 @@ PanelWindow {
                         ShellComboBox {
                             id: targetSelect
                             Layout.fillWidth: true
+                            Layout.preferredWidth: 125 * root.widthScale
+                            Layout.minimumWidth: 0
+                            font.pixelSize: 10
                             visible: convertCategory.currentIndex !== 4
                             model: root.targetOptions
                             currentIndex: 0
@@ -736,56 +835,83 @@ PanelWindow {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
+                            font.pixelSize: 9
                             text: "S̲earch"
                             leftPadding: 3
                             rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
+                            darkBorder: true
                             onClicked: root.openWebSearch()
                         }
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
+                            font.pixelSize: 9
                             text: "T̲ranslate"
                             leftPadding: 3
                             rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
+                            darkBorder: true
                             onClicked: root.searchGoogle("translate")
                         }
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
+                            font.pixelSize: 9
                             text: "Co̲nvert"
                             leftPadding: 3
                             rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
+                            darkBorder: true
                             onClicked: root.searchGoogle("convert")
                         }
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
+                            font.pixelSize: 9
                             text: "P̲rice"
                             leftPadding: 3
                             rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
+                            darkBorder: true
                             onClicked: root.searchGoogle("price")
                         }
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
+                            font.pixelSize: 9
                             text: "W̲eather"
                             leftPadding: 3
                             rightPadding: 3
                             enabled: true
                             accent: true
+                            darkBorder: true
                             onClicked: root.searchWeather()
+                        }
+                        ShellButton {
+                            id: colorButton
+                            focusPolicy: Qt.NoFocus
+                            Layout.fillWidth: true
+                            implicitHeight: 25
+                            font.pixelSize: 9
+                            text: "Co̲lor"
+                            enabled: root.expression.trim().length > 0
+                            accent: true
+                            darkBorder: true
+                            onClicked: root.showDetectedColor()
+                            ShellToolTip {
+                                parent: colorButton
+                                visible: colorButton.hovered
+                                text: "Show detected color (Ctrl+L)"
+                            }
                         }
                     }
 
@@ -813,6 +939,7 @@ PanelWindow {
                                 elide: Text.ElideRight
                             }
                             ShellButton {
+                                font.pixelSize: 10
                                 focusPolicy: Qt.NoFocus
                                 text: "Copy"
                                 enabled: !!root.calculationResult
@@ -851,7 +978,30 @@ PanelWindow {
                                 font.bold: true
                                 wrapMode: Text.Wrap
                             }
+                            Rectangle {
+                                visible: root.colorResult
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 76
+                                radius: 8
+                                color: Qt.color(root.detectedColor)
+                                border.color: "#607089"
+                                border.width: 1
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: root.detectedColor.toUpperCase()
+                                    color: {
+                                        var color = Qt.color(root.detectedColor)
+                                        return color && color.valid &&
+                                            (color.r * 0.299 + color.g * 0.587 + color.b * 0.114) > 0.55
+                                            ? "#172033" : "#f5f7fb"
+                                    }
+                                    font.family: "JetBrainsMono Nerd Font Mono"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                            }
                             ShellButton {
+                                font.pixelSize: 10
                                 focusPolicy: Qt.NoFocus
                                 Layout.alignment: Qt.AlignRight
                                 visible: root.googleResultText.length > 0
@@ -969,6 +1119,7 @@ PanelWindow {
                                 ScrollBar.horizontal: ScrollBar { }
                             }
                             ShellButton {
+                                font.pixelSize: 10
                                 visible: root.weatherResult && root.googleResultTitle.length > 0 &&
                                     weatherProcess.imageLocation.length > 0
                                 Layout.alignment: Qt.AlignRight
@@ -1007,12 +1158,28 @@ PanelWindow {
                                 readonly property bool functionKey:
                                     ["sin(", "cos(", "tan(", "sqrt(", "ln(", "log(", "asin(", "acos("]
                                         .indexOf(modelData) >= 0
+                                readonly property bool operatorKey:
+                                    ["+", "-", "*", "/", "^", "!", "(", ")", "="]
+                                        .indexOf(modelData) >= 0
                                 focusPolicy: Qt.NoFocus
                                 Layout.fillWidth: true
                                 implicitHeight: 25
+                                font.pixelSize: 10
                                 text: modelData
                                 enabled: modelData !== "=" || root.expression.trim().length > 0
                                 accent: modelData === "="
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: !parent.enabled ? "#657188"
+                                        : (parent.functionKey ? "#75baff"
+                                            : (parent.operatorKey ? "#69db9a"
+                                                : (parent.accent || parent.selected || parent.hovered
+                                                    ? "#abc7ff" : "#dce5f2")))
+                                    font: parent.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                }
                                 background: Rectangle {
                                     radius: 6
                                     color: !parent.enabled ? "#161d2a"
@@ -1046,6 +1213,7 @@ PanelWindow {
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 10
                         horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
                     }
                 }
 

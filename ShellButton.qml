@@ -9,6 +9,7 @@ Button {
     property bool selected: false
     property bool accent: false
     property bool danger: false
+    property bool darkBorder: false
 
     implicitHeight: 30
     font.pixelSize: 12
@@ -21,8 +22,10 @@ Button {
             : (root.accent || root.selected ? "#22334f" : "#161d2a")))
         border.width: 1
         border.color: !root.enabled ? "#222936"
+            : (root.darkBorder ? "#111722"
             : ((root.hovered || root.down) ? (root.danger ? "#ff6b81" : "#abc7ff")
             : (root.accent || root.selected ? "#5476a4" : "#2b364a"))
+            )
     }
 
     contentItem: Text { text: root.text

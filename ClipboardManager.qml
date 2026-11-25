@@ -17,14 +17,50 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: service.raisedCardModule === "clipboard" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-clipboard-manager"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region { Region { item: card } }
     property real cardX: -600
     property real openTargetX: 12
 
+    function focusedWindowGeometry() {
+        var activeId = String(service.activeWindowId || "")
+        var workspaces = service.workspaces || []
+        for (var i = 0; i < workspaces.length; i++) {
+            var windows = workspaces[i].windows || []
+            for (var j = 0; j < windows.length; j++) {
+                if (String(windows[j].id) === activeId) return windows[j]
+            }
+        }
+        return null
+    }
+
     function positionOppositeFocusedWindow() {
-        openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
-            root.width, card.width, 12)
+        var margin = 12
+        var activeWindow = focusedWindowGeometry()
+        if (!activeWindow) {
+            openTargetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
+                root.width, card.width, margin)
+            return
+        }
+
+        var screenX = Number(root.screen.x || 0)
+        var windowLeft = Number(activeWindow.x || 0) - screenX
+        var windowRight = windowLeft + Number(activeWindow.width || 0)
+        var leftSpace = Math.max(0, windowLeft - margin)
+        var rightSpace = Math.max(0, root.width - windowRight - margin)
+        var windowCenter = windowLeft + Number(activeWindow.width || 0) / 2
+        var preferRight = windowCenter < root.width / 2
+
+        if (preferRight && rightSpace >= card.width)
+            openTargetX = root.width - card.width - margin
+        else if (!preferRight && leftSpace >= card.width)
+            openTargetX = margin
+        else if (leftSpace >= card.width)
+            openTargetX = margin
+        else if (rightSpace >= card.width)
+            openTargetX = root.width - card.width - margin
+        else
+            openTargetX = leftSpace >= rightSpace ? margin : root.width - card.width - margin
     }
 
     function openFromOppositeSide() {
@@ -65,6 +101,9 @@ PanelWindow {
     onVisibleChanged: {
         if (visible) {
             service.raiseCardModule("clipboard")
+            Qt.callLater(function() {
+                if (root.visible) card.forceActiveFocus()
+            })
             if (!slideIn.running) openFromOppositeSide()
         } else {
             slideIn.stop()
@@ -72,7 +111,10 @@ PanelWindow {
     }
 
     Component.onCompleted: {
-        if (visible && !slideIn.running) openFromOppositeSide()
+        if (visible) {
+            card.forceActiveFocus()
+            if (!slideIn.running) openFromOppositeSide()
+        }
     }
 
     function close() {
@@ -137,28 +179,44 @@ PanelWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Text {
+                        Layout.fillWidth: true
                         text: "Clipboard Manager"
                         color: "#e2e8f0"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 17
                     }
-                    Item { Layout.fillWidth: true }
-                    ShellButton { text: "×"; onClicked: root.close() }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 6
                     ShellButton {
-                        text: "Capture text"
+                        id: captureTextButton
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 26
+                        text: "▤"
                         onClicked: root.service.openQTextPicker()
+                        ShellToolTip {
+                            parent: captureTextButton
+                            visible: captureTextButton.hovered
+                            text: "Capture text"
+                        }
                     }
                     ShellButton {
-                        text: "Clear"
+                        id: clearHistoryButton
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 26
+                        text: "⌫"
+                        danger: true
                         enabled: root.service.clipboardHistory.length > 0
                         onClicked: root.service.clearClipboardHistory()
+                        ShellToolTip {
+                            parent: clearHistoryButton
+                            visible: clearHistoryButton.hovered
+                            text: "Clear history"
+                        }
                     }
-                    Item { Layout.fillWidth: true }
+                    ShellButton {
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 26
+                        text: "×"
+                        onClicked: root.close()
+                    }
                 }
 
                 Text {

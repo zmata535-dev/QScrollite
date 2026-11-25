@@ -27,6 +27,9 @@ QtObject {
     property bool bluetoothDaemonReady: false
     property bool bluetoothScanOnOpen: false
     property bool bluetoothPowerAfterServiceStart: false
+    property bool bluetoothSettingsReady: false
+    property bool startupBluetoothReconnectChecked: false
+    property string lastBluetoothDeviceAddress: ""
     property var bluetoothDevices: []
     property string bluetoothMessage: ""
     property string bluetoothCommandOutput: ""
@@ -236,6 +239,28 @@ QtObject {
         JsonAdapter {
             id: pinnedAppsStore
             property list<string> pinnedApps: []
+        }
+    }
+
+    property var bluetoothSettingsFile: FileView {
+        id: bluetoothSettingsFile
+        path: (Quickshell.env("HOME") || "") + "/.config/quickshell/bluetooth-settings.json"
+        onLoaded: {
+            service.bluetoothSettingsReady = true
+            service.attemptStartupBluetoothReconnect()
+        }
+        onLoadFailed: function(error) {
+            service.bluetoothSettingsReady = true
+            service.attemptStartupBluetoothReconnect()
+        }
+        onAdapterUpdated: {
+            if (service.bluetoothSettingsReady) writeAdapter()
+        }
+
+        JsonAdapter {
+            id: bluetoothSettings
+            property string lastDeviceAddress: ""
+            onLastDeviceAddressChanged: service.lastBluetoothDeviceAddress = lastDeviceAddress
         }
     }
 
@@ -905,6 +930,7 @@ QtObject {
                 service.bluetoothScanOnOpen = false
                 service.scanBluetooth()
             }
+            service.attemptStartupBluetoothReconnect()
         }
     }
 
@@ -1392,6 +1418,18 @@ QtObject {
             bluetoothRefreshProcess.running = true;
     }
 
+    function attemptStartupBluetoothReconnect() {
+        if (startupBluetoothReconnectChecked || !bluetoothSettingsReady || bluetoothRefreshProcess.running)
+            return
+        if (!bluetoothDaemonReady || !bluetoothPowered) return
+        startupBluetoothReconnectChecked = true
+        var address = String(lastBluetoothDeviceAddress || "").trim().toUpperCase()
+        if (!/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(address)) return
+        var device = bluetoothDevices.find(function(item) { return item.address === address })
+        if (device && device.connected) return
+        connectBluetooth(address)
+    }
+
     function scanBluetooth() {
         if (!bluetoothDaemonReady) {
             bluetoothMessage = "Start the Bluetooth service before scanning"
@@ -1449,6 +1487,9 @@ QtObject {
     }
 
     function connectBluetooth(address) {
+        lastBluetoothDeviceAddress = String(address || "").trim().toUpperCase()
+        bluetoothSettings.lastDeviceAddress = lastBluetoothDeviceAddress
+        if (bluetoothSettingsReady) bluetoothSettingsFile.writeAdapter()
         runBluetoothCommand(["connect", address], "Connecting to " + address + "…");
     }
 
@@ -1533,7 +1574,7 @@ QtObject {
         onTriggered: {
             if (!service.compactClockPending) return;
             var wallpaperOpen = service.wallpaperService && service.wallpaperService.selectorOpen;
-            if (service.open || service.appMenuOpen || service.appMenuPending || service.gDictCalcOpen || service.qSysMonOpen) {
+            if (service.open || service.appMenuOpen || service.appMenuPending || service.qSysMonOpen) {
                 service.compactClockPending = false;
                 return;
             }
@@ -1638,7 +1679,7 @@ QtObject {
             return;
         }
         if (!compactClockEnabled) return;
-        if (open || appMenuOpen || appMenuPending || gDictCalcOpen) {
+        if (open || appMenuOpen || appMenuPending) {
             compactClockOpenTimer.stop();
             compactClockPending = false;
             return;
