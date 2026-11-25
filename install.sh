@@ -188,12 +188,16 @@ check_dependencies() {
 
     # Font suggestions
     if command -v fc-list >/dev/null 2>&1; then
-        if fc-list : family | grep -iq "nerd"; then
+        # Capture the full output before matching. With pipefail enabled,
+        # grep -q can close the pipe early and make fc-list fail with SIGPIPE.
+        local font_families
+        font_families="$(fc-list : family 2>/dev/null || true)"
+        if printf '%s\n' "$font_families" | grep -i "nerd" >/dev/null; then
             log_ok "Nerd Font detected (used for icons in UI widgets)"
         else
             log_warn "No Nerd Font detected (recommended for status icons)"
         fi
-        if fc-list : family | grep -iq "cantarell"; then
+        if printf '%s\n' "$font_families" | grep -i "cantarell" >/dev/null; then
             log_ok "Cantarell font detected (used by Clock Card)"
         else
             log_info "Cantarell font not found (UI will fall back to system default font)"
