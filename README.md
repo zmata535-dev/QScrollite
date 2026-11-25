@@ -34,7 +34,7 @@ A feature-packed desktop shell built with [Quickshell](https://git.outfoxxed.me/
   - Large lock/idle clock display with configurable font size, color, and smooth animations.
   - Interactive monthly calendar with day/week navigation.
 
-- **Idle & Power Management Settings (`IdleSettings.qml`, `apply-idle-settings.py`)**
+- **System & Power Settings (`QSetting.qml`, `apply-idle-settings.py`)**
   - Visual configuration panel for screen dim, display turn-off, and lock timeouts.
 
 - **Screen Edge Hot Corners (`HotCorner*.qml`, `HotCornerService.qml`)**
@@ -236,7 +236,7 @@ exec quickshell
 ├── ClockCard.qml                # Lock / idle clock display
 ├── HotCorner*.qml               # Corner hitboxes and visual indicators
 ├── HotCornerService.qml         # Hot corner event coordinator
-├── IdleSettings.qml             # Timeout settings GUI
+├── QSetting.qml                 # System and idle settings GUI
 ├── PolkitDialog.qml             # Polkit authentication agent
 ├── SystemActionButton.qml       # Reusable button component
 ├── WallpaperSelector.qml        # Wallpaper grid browser modal

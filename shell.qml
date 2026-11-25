@@ -235,7 +235,7 @@ ShellRoot {
     LazyLoader {
         active: switcherService.idleConfigOpen
 
-        IdleSettings {
+        QSetting {
             service: switcherService
         }
     }
@@ -249,6 +249,13 @@ ShellRoot {
         model: Quickshell.screens
         CompactClockEdge {
             service: switcherService
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        HotEdgeLeft {
+            onCloseShellCardsRequested: root.closeAllShellPanels()
         }
     }
 

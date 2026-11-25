@@ -25,7 +25,8 @@ PanelWindow {
 
     WlrLayershell.layer: service.raisedCardModule === "gdictcalc" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-gdictcalc"
-    WlrLayershell.keyboardFocus: visible && focusedInput && cardHover.hovered
+    WlrLayershell.keyboardFocus: visible && focusedInput &&
+        (cardHover.hovered || comboPopupOpen || focusedInput === calcField)
         ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     mask: Region { item: card }
     property real cardX: -500
@@ -33,6 +34,10 @@ PanelWindow {
     property string focusAtOpen: ""
     property bool openingScheduled: false
     property var focusedInput: null
+    readonly property real widthScale: 0.7
+    readonly property bool comboPopupOpen:
+        languageFrom.popup.visible || languageSelect.popup.visible ||
+        convertCategory.popup.visible || targetSelect.popup.visible
 
     function updateOpenTarget() {
         var requestedX = PanelPlacement.oppositeTargetX(
@@ -62,7 +67,8 @@ PanelWindow {
     function openAtOppositeSide() {
         if (!visible || slideIn.running || openingScheduled) return
         openingScheduled = true
-        releaseKeyboardFocus()
+        if (dictionaryMode) releaseKeyboardFocus()
+        else focusSearchBox()
         focusAtOpen = String(service.activeWindowId || "")
         Qt.callLater(function() {
             root.openingScheduled = false
@@ -154,7 +160,9 @@ PanelWindow {
     property int googleSearchGeneration: 0
     readonly property string weatherUrl: "https://wttr.in/" +
         encodeURIComponent(weatherProcess.location).replace(/%20/g, "+")
-    readonly property string weatherImageUrl: weatherUrl + ".png?Fnd"
+    readonly property string weatherImageUrl: weatherProcess.imageLocation.length
+        ? "https://wttr.in/" + encodeURIComponent(weatherProcess.imageLocation).replace(/%20/g, "+") + ".png?Fnd"
+        : ""
     readonly property string calculationResult: {
         var result = Scientific.evaluate(expression)
         return result ? result.value : ""
@@ -231,6 +239,8 @@ PanelWindow {
     Process {
         id: weatherProcess
         property string location: ""
+        property string imageLocation: ""
+        property bool localLookup: false
         command: ["curl", "--fail", "--silent", "--show-error", "--max-time", "15",
             root.weatherUrl + "?format=j1"]
         running: false
@@ -245,10 +255,13 @@ PanelWindow {
                 return
             }
             var resolvedLocation = location
+            var resolvedAreaName = ""
             try {
                 var data = JSON.parse(String(weatherOutput.text || "").trim())
                 var area = data.nearest_area && data.nearest_area.length ? data.nearest_area[0] : null
                 if (area) {
+                    resolvedAreaName = area.areaName && area.areaName.length
+                        ? String(area.areaName[0].value || "").trim() : ""
                     var locationParts = [area.areaName, area.region, area.country].map(function(value) {
                         return value && value.length ? String(value[0].value || "").trim() : ""
                     }).filter(function(value, index, values) {
@@ -257,8 +270,11 @@ PanelWindow {
                     if (locationParts.length) resolvedLocation = locationParts.join(", ")
                 }
             } catch (e) {}
+            weatherProcess.imageLocation = location || resolvedAreaName
             root.statusText = ""
-            root.googleResultTitle = "Weather report: " + location + " ~ " + resolvedLocation
+            root.googleResultTitle = weatherProcess.localLookup
+                ? "Local weather: " + (resolvedLocation || "near you")
+                : "Weather report: " + location + " ~ " + resolvedLocation
             root.googleResultText = ""
         }
     }
@@ -346,6 +362,16 @@ PanelWindow {
         Qt.callLater(function() {
             if (root.focusedInput === field && !field.activeFocus)
                 root.focusedInput = null
+        })
+    }
+
+    function focusSearchBox() {
+        if (!root.visible || root.dictionaryMode) return
+        Qt.callLater(function() {
+            if (!root.visible || root.dictionaryMode) return
+            root.focusedInput = calcField
+            calcField.forceActiveFocus()
+            calcField.cursorPosition = calcField.text.length
         })
     }
 
@@ -491,16 +517,15 @@ PanelWindow {
             statusText = "Wait for the current search to finish."
             return
         }
-        var place = expression.trim()
-        if (!place) {
-            statusText = "Enter a city or location first."
-            return
-        }
+        var requestedPlace = expression.trim()
+        var place = requestedPlace || String(service.localWeatherLocation || "Jakarta").trim()
         weatherResult = true
         dictionaryApiResult = false
         definitionRequested = false
         translationRequested = false
         weatherProcess.location = place
+        weatherProcess.imageLocation = place
+        weatherProcess.localLookup = !requestedPlace
         dictionaryMode = true
         googleResultTitle = ""
         googleResultText = ""
@@ -545,7 +570,7 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.max(0, Math.min(480, root.width - 24))
+            width: Math.max(0, Math.min(480, root.width - 24) * root.widthScale)
             height: Math.min(content.implicitHeight + 24, root.height - 48)
             x: root.cardX
             y: (parent.height - height) / 2
@@ -564,7 +589,7 @@ PanelWindow {
             HoverHandler {
                 id: cardHover
                 onHoveredChanged: {
-                    if (!hovered) root.releaseKeyboardFocus()
+                    if (!hovered && !root.comboPopupOpen) root.releaseKeyboardFocus()
                 }
             }
 
@@ -572,7 +597,10 @@ PanelWindow {
                 z: 1
                 id: content
                 anchors.fill: parent
-                anchors.margins: 12
+                anchors.topMargin: 12
+                anchors.bottomMargin: 12
+                anchors.leftMargin: 12 * root.widthScale
+                anchors.rightMargin: 12 * root.widthScale
                 spacing: 7
 
                 RowLayout {
@@ -581,8 +609,8 @@ PanelWindow {
                     Text {
                         text: root.dictionaryMode
                             ? (root.definitionRequested ? "Definition"
-                                : (root.translationRequested ? "Translation" : "Google result"))
-                            : "Answer"
+                                : (root.translationRequested ? "Translation" : "Result"))
+                            : "Question"
                         color: "#e2e8f0"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 17
@@ -593,7 +621,7 @@ PanelWindow {
                     ShellButton {
                         focusPolicy: Qt.NoFocus
                         visible: root.dictionaryMode
-                        text: "<< Answer"
+                        text: "<< Question"
                         onClicked: {
                             root.dictionaryMode = false
                             root.definitionRequested = false
@@ -603,7 +631,7 @@ PanelWindow {
                             root.googleResultTitle = ""
                             root.googleResultText = ""
                             Qt.callLater(function() {
-                                calcField.forceActiveFocus()
+                                root.focusSearchBox()
                             })
                         }
                     }
@@ -623,9 +651,9 @@ PanelWindow {
                         id: calcField
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        placeholderText: "Expression, word, amount, currency, or product"
+                        placeholderText: "Search · blank = local weather"
                         text: root.expression
-                        rightPadding: 38
+                        rightPadding: 38 * root.widthScale
                         selectByMouse: true
                         onTextEdited: root.expression = text
                         onAccepted: root.calculate()
@@ -635,9 +663,9 @@ PanelWindow {
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             anchors.right: parent.right
-                            anchors.rightMargin: 4
+                            anchors.rightMargin: 4 * root.widthScale
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 28
+                            width: 28 * root.widthScale
                             height: 24
                             visible: calcField.text.length > 0
                             text: "󰃣"
@@ -651,7 +679,7 @@ PanelWindow {
                     RowLayout {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        spacing: 5
+                        spacing: 5 * root.widthScale
                         Text { text: "From"; color: "#94a3b8"; font.pixelSize: 11 }
                         ShellComboBox {
                             id: languageFrom
@@ -673,11 +701,11 @@ PanelWindow {
                     RowLayout {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        spacing: 5
+                        spacing: 5 * root.widthScale
                         Text { text: "Convert"; color: "#94a3b8"; font.pixelSize: 11 }
                         ShellComboBox {
                             id: convertCategory
-                            Layout.preferredWidth: 125
+                            Layout.preferredWidth: 125 * root.widthScale
                             model: ["Currencies", "Length", "Weight", "Tech units", "Custom"]
                             onActivated: targetSelect.currentIndex = 0
                             onActiveFocusChanged: root.setInputFocus(convertCategory, activeFocus)
@@ -703,12 +731,14 @@ PanelWindow {
                     RowLayout {
                         visible: !root.dictionaryMode
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 8 * root.widthScale
                         ShellButton {
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
                             text: "S̲earch"
+                            leftPadding: 3
+                            rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.openWebSearch()
@@ -718,6 +748,8 @@ PanelWindow {
                             Layout.fillWidth: true
                             implicitHeight: 25
                             text: "T̲ranslate"
+                            leftPadding: 3
+                            rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.searchGoogle("translate")
@@ -727,6 +759,8 @@ PanelWindow {
                             Layout.fillWidth: true
                             implicitHeight: 25
                             text: "Co̲nvert"
+                            leftPadding: 3
+                            rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.searchGoogle("convert")
@@ -736,6 +770,8 @@ PanelWindow {
                             Layout.fillWidth: true
                             implicitHeight: 25
                             text: "P̲rice"
+                            leftPadding: 3
+                            rightPadding: 3
                             enabled: root.expression.trim().length > 0
                             accent: true
                             onClicked: root.searchGoogle("price")
@@ -745,7 +781,9 @@ PanelWindow {
                             Layout.fillWidth: true
                             implicitHeight: 25
                             text: "W̲eather"
-                            enabled: root.expression.trim().length > 0
+                            leftPadding: 3
+                            rightPadding: 3
+                            enabled: true
                             accent: true
                             onClicked: root.searchWeather()
                         }
@@ -754,14 +792,17 @@ PanelWindow {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: root.dictionaryMode
-                            ? Math.min(220, resultColumn.implicitHeight + 16) : 42
+                            ? Math.min(root.weatherResult ? 260 : 220, resultColumn.implicitHeight + 16) : 42
                         radius: 7
                         color: "#161d2a"
                         border.color: "#2b364a"
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 6
+                            anchors.topMargin: 6
+                            anchors.bottomMargin: 6
+                            anchors.leftMargin: 6 * root.widthScale
+                            anchors.rightMargin: 6 * root.widthScale
                             visible: !root.dictionaryMode
                             Text {
                                 Layout.fillWidth: true
@@ -782,7 +823,10 @@ PanelWindow {
                         ColumnLayout {
                             id: resultColumn
                             anchors.fill: parent
-                            anchors.margins: 8
+                            anchors.topMargin: 8
+                            anchors.bottomMargin: 8
+                            anchors.leftMargin: 8 * root.widthScale
+                            anchors.rightMargin: 8 * root.widthScale
                             spacing: 4
                             visible: root.dictionaryMode
 
@@ -912,7 +956,7 @@ PanelWindow {
 
                                 Image {
                                     id: weatherImage
-                                    width: weatherImageFlickable.width * 1.2
+                                    width: weatherImageFlickable.width * 1.5
                                     height: sourceSize.width > 0
                                         ? width * sourceSize.height / sourceSize.width : weatherImageFlickable.height
                                     source: weatherImageFlickable.visible ? root.weatherImageUrl : ""
@@ -924,22 +968,15 @@ PanelWindow {
                                 ScrollBar.vertical: ScrollBar { }
                                 ScrollBar.horizontal: ScrollBar { }
                             }
-                            Text {
-                                Layout.fillWidth: true
-                                visible: root.lastGoogleUrl.length > 0
-                                text: root.weatherResult ? "Open wttr.in ↗" :
-                                    (root.translationRequested
-                                        ? "Translate from " + root.googleSearchSourceLanguage + " to " + root.googleSearchTargetLanguage + " ↗"
-                                        : (root.definitionRequested || root.dictionaryApiResult
-                                            ? "Search definition ↗" : "Open Google search ↗"))
-                                color: "#abc7ff"
-                                font.family: "JetBrainsMono Nerd Font Mono"
-                                font.pixelSize: 11
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(root.lastGoogleUrl)
-                                }
+                            ShellButton {
+                                visible: root.weatherResult && root.googleResultTitle.length > 0 &&
+                                    weatherProcess.imageLocation.length > 0
+                                Layout.alignment: Qt.AlignRight
+                                implicitHeight: 24
+                                text: "Show map"
+                                onClicked: Qt.openUrlExternally(
+                                    "https://www.google.com/maps/search/?api=1&query=" +
+                                    encodeURIComponent(weatherProcess.imageLocation).replace(/%20/g, "+"))
                             }
                         }
                     }
@@ -949,7 +986,7 @@ PanelWindow {
                         Layout.fillWidth: true
                         columns: 4
                         rowSpacing: 4
-                        columnSpacing: 4
+                        columnSpacing: 4 * root.widthScale
 
                         Repeater {
                             model: [

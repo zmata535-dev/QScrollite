@@ -22,7 +22,7 @@ PanelWindow {
     }
 
     WlrLayershell.layer: service.raisedCardModule === "settings" ? WlrLayer.Overlay : WlrLayer.Top
-    WlrLayershell.namespace: "quickshell-idle-settings"
+    WlrLayershell.namespace: "quickshell-qsetting"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     property real settingsCardX: -500
     property real settingsTargetX: 12
@@ -415,6 +415,28 @@ font.pixelSize: 17
                         from: 1; to: 3600; editable: true
                         value: root.service.notificationService.timeoutSeconds
                         onValueModified: root.service.notificationService.setTimeoutSeconds(value)
+                    }
+
+                    Text {
+                        font.family: "JetBrainsMono Nerd Font Mono"
+                        font.weight: Font.Light
+                        text: "Local weather location"
+                        color: "#dce5f2"
+                        font.pixelSize: 10
+                    }
+                    ShellTextField {
+                        id: localWeatherLocationField
+                        Layout.fillWidth: true
+                        implicitHeight: 20
+                        font.pixelSize: 9
+                        text: root.service.localWeatherLocation
+                        placeholderText: "City, region or country"
+                        maximumLength: 128
+                        onEditingFinished: {
+                            var place = text.trim()
+                            if (place.length) root.service.localWeatherLocation = place
+                            else text = root.service.localWeatherLocation
+                        }
                     }
                 }
 

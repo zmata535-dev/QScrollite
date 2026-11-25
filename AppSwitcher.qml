@@ -21,7 +21,8 @@ PanelWindow {
     }
 
     // Keep hot-corner surfaces (Overlay layer) interactive above the panel.
-    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.layer: switcherWindow.pendingSystemAction.length > 0
+        ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-app-switcher"
     // Only take keyboard focus while the pointer is over the switcher, so
     // applications remain able to receive keyboard input outside the bar.
@@ -50,18 +51,29 @@ PanelWindow {
     property real contextMenuY: 0
     property bool controlsPointerFollowPending: false
     property string pendingSystemAction: ""
+    property string raisedCardBeforeSystemAction: ""
 
     function requestSystemAction(action) {
+        if (!pendingSystemAction.length) {
+            raisedCardBeforeSystemAction = String(service.raisedCardModule || "")
+            service.raiseCardModule("session-confirmation")
+        }
         pendingSystemAction = action
     }
 
-    function cancelSystemAction() {
+    function finishSystemActionConfirmation() {
         pendingSystemAction = ""
+        service.raiseCardModule(raisedCardBeforeSystemAction)
+        raisedCardBeforeSystemAction = ""
+    }
+
+    function cancelSystemAction() {
+        finishSystemActionConfirmation()
     }
 
     function confirmSystemAction() {
         var action = pendingSystemAction
-        pendingSystemAction = ""
+        finishSystemActionConfirmation()
         if (action) switcherWindow.service.runSystemAction(action)
     }
 

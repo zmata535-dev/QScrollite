@@ -104,6 +104,7 @@ QtObject {
     property alias idleDisplayOffTimeout: idleSettings.displayOffTimeout
     property alias idleLockTimeout: idleSettings.lockTimeout
     property alias idleClockTextColor: idleSettings.clockTextColor
+    property alias localWeatherLocation: idleSettings.localWeatherLocation
     property alias idleClockTextSize: idleSettings.clockTextSize
     property alias compactClockTextSize: idleSettings.compactClockTextSize
     property alias iconTheme: idleSettings.iconTheme
@@ -194,6 +195,7 @@ QtObject {
             property int displayOffTimeout: 21
             property int lockTimeout: 26
             property string clockTextColor: "#e2e8f0"
+            property string localWeatherLocation: "Jakarta"
             property string iconTheme: "Suru++"
             property int clockTextSize: 96
             property int compactClockTextSize: 36
