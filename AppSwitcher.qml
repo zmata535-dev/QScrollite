@@ -1574,7 +1574,7 @@ RowLayout {
             RowLayout {
                 id: headerRow
                 Layout.fillWidth: true
-                spacing: 7
+                spacing: 0
 
                 // Two-line Clock and Date
                 Item {
