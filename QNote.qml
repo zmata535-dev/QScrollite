@@ -66,6 +66,22 @@ PanelWindow {
         return color === clipboardNoteColor ? "transparent" : Qt.darker(color, 1.35)
     }
 
+    function noteTextColorMode(note, colorOverride) {
+        var mode = Number(note.textColorMode)
+        if (mode === 0 || mode === 1 || mode === 2) return mode
+        // Migrate the former inverse toggle without changing existing notes' text color.
+        var normallyDark = String(colorOverride || note.color || "") === clipboardNoteColor
+        return normallyDark !== (note.inverseTextColor === true) ? 0 : 1
+    }
+
+    function noteTextColor(note) {
+        return ["#000000", "#7fc8c2", "#d3d3d3"][noteTextColorMode(note)]
+    }
+
+    function noteTextColorName(note) {
+        return ["Black", "Light teal", "Light gray"][noteTextColorMode(note)]
+    }
+
     function noteControlBackground(color, controlsVisible, hovered, idle) {
         if (!controlsVisible && color === clipboardNoteColor) return "transparent"
         return Qt.darker(color, idle || !controlsVisible ? 1.35 : (hovered ? 1.9 : 1.6))
@@ -116,7 +132,8 @@ PanelWindow {
             return {
                 title: String(note.title || ("Note " + (index + 1))),
                 text: String(note.text || ""),
-                color: color
+                color: color,
+                textColorMode: noteTextColorMode(note, color)
             }
         })
         service.qNoteCurrentIndex = noteItems.length
@@ -131,8 +148,18 @@ PanelWindow {
             return {
                 title: String(note.title || ""),
                 text: String(note.text || ""),
-                color: String(note.color || pastelPalette[1].color)
+                color: String(note.color || pastelPalette[1].color),
+                textColorMode: noteTextColorMode(note)
             }
+        })
+    }
+
+    function replaceNotesPreservingScroll(updated) {
+        var previousContentY = noteList.contentY
+        noteItems = updated
+        Qt.callLater(function() {
+            var maxContentY = Math.max(0, noteList.contentHeight - noteList.height)
+            noteList.contentY = Math.max(0, Math.min(previousContentY, maxContentY))
         })
     }
 
@@ -149,9 +176,25 @@ PanelWindow {
         updated[index] = {
             title: updated[index].title,
             text: updated[index].text,
-            color: pastelPalette[colorIndex].color
+            color: pastelPalette[colorIndex].color,
+            textColorMode: noteTextColorMode(updated[index])
         }
-        noteItems = updated
+        replaceNotesPreservingScroll(updated)
+        service.qNoteCurrentIndex = index
+        saveNotes()
+        service.flushQNoteSave()
+    }
+
+    function toggleNoteTextColor(index) {
+        if (index < 0 || index >= noteItems.length) return
+        var updated = noteItems.slice(0)
+        updated[index] = {
+            title: updated[index].title,
+            text: updated[index].text,
+            color: updated[index].color,
+            textColorMode: (noteTextColorMode(updated[index]) + 1) % 3
+        }
+        replaceNotesPreservingScroll(updated)
         service.qNoteCurrentIndex = index
         saveNotes()
         service.flushQNoteSave()
@@ -159,7 +202,8 @@ PanelWindow {
 
     function addNote() {
         var updated = noteItems.slice(0)
-        updated.push({ title: "Note " + (updated.length + 1), text: "", color: pastelPalette[1].color })
+        updated.push({ title: "Note " + (updated.length + 1), text: "", color: pastelPalette[1].color,
+            textColorMode: 1 })
         noteItems = updated
         service.qNoteCurrentIndex = updated.length - 1
         saveNotes()
@@ -179,7 +223,8 @@ PanelWindow {
         updated.push({
             title: "Clipboard note",
             text: String(text || ""),
-            color: clipboardNoteColor
+            color: clipboardNoteColor,
+            textColorMode: 0
         })
         noteItems = updated
         service.qNoteCurrentIndex = updated.length - 1
@@ -588,8 +633,7 @@ PanelWindow {
                                 font.pixelSize: 10
                                 placeholderText: "Note title"
                                 text: noteItemCard.modelData.title || ""
-                                color: noteItemCard.modelData.color === root.clipboardNoteColor
-                                    ? "#36352d" : "#e5ebf4"
+                                color: root.noteTextColor(noteItemCard.modelData)
                                 background: Rectangle {
                                     color: root.noteFieldBackground(noteItemCard.modelData.color)
                                     radius: root.cornerRadius
@@ -641,6 +685,36 @@ PanelWindow {
                                 onClicked: {
                                     root.openPresetMenuIndex = noteItemCard.presetMenuOpen
                                         ? -1 : noteItemCard.index
+                                }
+                            }
+
+                            ShellButton {
+                                id: textColorButton
+                                Layout.preferredWidth: 22
+                                implicitWidth: 22
+                                implicitHeight: 23
+                                font.pixelSize: 13
+                                focusPolicy: Qt.NoFocus
+                                text: "A"
+                                background: Rectangle {
+                                    radius: root.cornerRadius
+                                    color: root.noteControlBackground(noteItemCard.modelData.color,
+                                        noteItemCard.noteControlsVisible, textColorButton.hovered, false)
+                                    border.width: 0
+                                }
+                                contentItem: Text {
+                                    text: textColorButton.text
+                                    color: noteItemCard.noteControlsVisible
+                                        ? root.noteTextColor(noteItemCard.modelData) : "transparent"
+                                    font: textColorButton.font
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: root.toggleNoteTextColor(noteItemCard.index)
+                                ShellToolTip {
+                                    parent: textColorButton
+                                    visible: textColorButton.hovered
+                                    text: "Text color: " + root.noteTextColorName(noteItemCard.modelData) + " · click to cycle"
                                 }
                             }
 
@@ -752,8 +826,7 @@ PanelWindow {
                             }
                             text: noteItemCard.modelData.text || ""
                             placeholderText: "Write a note…"
-                            color: noteItemCard.modelData.color === root.clipboardNoteColor
-                                ? "#36352d" : "#e5ebf4"
+                            color: root.noteTextColor(noteItemCard.modelData)
                             selectionColor: "#809ac0"
                             selectedTextColor: "#ffffff"
                             wrapMode: TextEdit.Wrap
