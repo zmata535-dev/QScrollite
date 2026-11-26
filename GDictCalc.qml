@@ -25,10 +25,13 @@ PanelWindow {
 
     WlrLayershell.layer: service.raisedCardModule === "gdictcalc" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-gdictcalc"
-    WlrLayershell.keyboardFocus: visible &&
-        ((focusedInput && cardHover.hovered) || comboPopupOpen)
+    WlrLayershell.keyboardFocus: visible && (focusedInput || comboPopupOpen)
         ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     mask: Region { Region { item: card } }
+    onComboPopupOpenChanged: {
+        if (!comboPopupOpen && !cardHover.hovered)
+            releaseKeyboardFocus()
+    }
     property real cardX: -500
     property real openTargetX: 12
     property string focusAtOpen: ""
@@ -596,6 +599,7 @@ PanelWindow {
         if (visible) {
             moveToOpenSide.stop()
             openAtOppositeSide()
+            focusSearchBox()
         } else {
             slideIn.stop()
             moveToOpenSide.stop()
