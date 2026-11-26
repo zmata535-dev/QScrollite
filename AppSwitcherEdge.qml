@@ -9,7 +9,7 @@ PanelWindow {
     required property var service
 
     screen: modelData
-    visible: service.bottomAppSwitcherEnabled
+    visible: true
     color: "transparent"
     implicitWidth: screen.width
     implicitHeight: 1

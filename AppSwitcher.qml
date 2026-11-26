@@ -538,7 +538,7 @@ PanelWindow {
         }
     }
 
-    // Floating Switcher Bar anchored near top-left
+    // Floating Switcher Bar anchored at the bottom center
     GlowBorder { targetItem: container; cornerRadius: container.radius }
 
     Component {
@@ -1520,10 +1520,8 @@ RowLayout {
 
     Rectangle {
         id: container
-        x: switcherWindow.service.switcherPlacement === "bottom-center"
-            ? (switcherWindow.width - width) / 2 : 0
-        y: switcherWindow.service.switcherPlacement === "bottom-center"
-            ? switcherWindow.height - height : 0
+        x: (switcherWindow.width - width) / 2
+        y: switcherWindow.height - height
 
         width: Math.min(switcherWindow.width - 32, Math.max(
             550,

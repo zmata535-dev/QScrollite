@@ -11,7 +11,6 @@ QtObject {
     property var notificationService: null
     property var pendingNotificationSender: null
     property bool open: false
-    property string switcherPlacement: "top-left"
     property bool appSwitcherHovered: false
     property bool appSwitcherClosePending: false
     property int volumePercent: 0
@@ -125,8 +124,6 @@ QtObject {
             networkReadProcess.running = false
         }
     }
-    property alias topAppSwitcherEnabled: idleSettings.topAppSwitcherEnabled
-    property alias bottomAppSwitcherEnabled: idleSettings.bottomAppSwitcherEnabled
     property alias emptyWorkspaceAction: idleSettings.emptyWorkspaceAction
     property alias autoHideAppSwitcherOnPointerLeave: idleSettings.autoHideAppSwitcherOnPointerLeave
     onEmptyWorkspaceActionChanged: lastEmptyWorkspaceKey = ""
@@ -206,8 +203,6 @@ QtObject {
             property bool clockShatterAnimationEnabled: true
             property bool clockSlideAnimationEnabled: false
             property bool showRssUsage: false
-            property bool topAppSwitcherEnabled: true
-            property bool bottomAppSwitcherEnabled: true
             property string emptyWorkspaceAction: "none"
             property bool autoHideAppSwitcherOnPointerLeave: false
             property int columnWidthSmall: 50
@@ -718,7 +713,7 @@ QtObject {
         if (emptyWorkspaceAction === "clock")
             openClock(true);
         else if (emptyWorkspaceAction === "switcher")
-            openSwitcher("bottom-center");
+            openSwitcher();
         else if (emptyWorkspaceAction === "calendar")
             openCalendar();
     }
@@ -1026,8 +1021,7 @@ QtObject {
         onTriggered: service.refreshBluetooth()
     }
 
-    function openSwitcher(placement) {
-        switcherPlacement = placement === "bottom-center" ? "bottom-center" : "top-left";
+    function openSwitcher() {
         cancelCompactClockForAppPanels();
         appSwitcherHovered = false;
         appSwitcherClosePending = false;
@@ -1045,7 +1039,7 @@ QtObject {
 
     function toggleBottomSwitcher() {
         if (open) closeSwitcher(true);
-        else openSwitcher("bottom-center");
+        else openSwitcher();
     }
 
     function refreshNetwork() {

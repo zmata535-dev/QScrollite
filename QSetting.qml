@@ -494,20 +494,6 @@ font.pixelSize: 17
                         onToggled: root.service.autoHideAppSwitcherOnPointerLeave = checked
                     }
 
-                    ShellCheckBox {
-                        Layout.alignment: Qt.AlignLeft
-                        font.pixelSize: 10
-                        text: "Top AppSwitcher"
-                        checked: root.service.topAppSwitcherEnabled
-                        onToggled: root.service.topAppSwitcherEnabled = checked
-                    }
-                    ShellCheckBox {
-                        Layout.alignment: Qt.AlignLeft
-                        font.pixelSize: 10
-                        text: "Bottom AppSwitcher"
-                        checked: root.service.bottomAppSwitcherEnabled
-                        onToggled: root.service.bottomAppSwitcherEnabled = checked
-                    }
                 }
 
                 RowLayout {
