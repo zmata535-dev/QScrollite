@@ -1947,7 +1947,7 @@ RowLayout {
 
                     Text {
                         anchors.centerIn: parent
-                        text: switcherWindow.service.showSwitcherSystemControls ? "🢗" : "🢕"
+                        text: switcherWindow.service.showSwitcherSystemControls ? "⌄" : "⌃"
                         color: switcherControlsMouse.containsMouse ? "#abc7ff" : "#8092ab"
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.pixelSize: 18
