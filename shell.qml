@@ -47,7 +47,17 @@ ShellRoot {
             switcherService.clipboardOpen || switcherService.qTextPickerOpen || switcherService.calendarOpen ||
             switcherService.calendarPending || switcherService.clockOpen || switcherService.compactClockOpen ||
             switcherService.compactClockPending || switcherService.idleConfigOpen
-        onActivated: root.closeAllShellPanels()
+        onActivated: {
+            if (notifications.notificationCenterOpen) {
+                notifications.closeCenter()
+                return
+            }
+            if (switcherService.calendarOpen || switcherService.calendarPending) {
+                switcherService.closeCalendar(true)
+                return
+            }
+            root.closeAllShellPanels()
+        }
     }
 
     WallpaperService {

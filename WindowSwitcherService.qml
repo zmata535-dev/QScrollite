@@ -33,12 +33,12 @@ QtObject {
     property string bluetoothMessage: ""
     property string bluetoothCommandOutput: ""
     property string bluetoothRepairAddress: ""
+    property string bluetoothConnectAfterPairAddress: ""
     property bool appMenuOpen: false
     property bool appMenuPending: false
     property string appMenuInitialText: ""
     property bool gDictCalcOpen: false
     property string raisedCardModule: ""
-    property real calendarGroupTargetX: 12
     property string gDictCalcInitialQuery: ""
     property bool qSysMonOpen: false
     property bool qNoteOpen: false
@@ -106,6 +106,7 @@ QtObject {
     property alias idleDisplayOffTimeout: idleSettings.displayOffTimeout
     property alias idleLockTimeout: idleSettings.lockTimeout
     property alias idleClockTextColor: idleSettings.clockTextColor
+    property alias idleDateTextColor: idleSettings.dateTextColor
     property alias localWeatherLocation: idleSettings.localWeatherLocation
     property alias idleClockTextSize: idleSettings.clockTextSize
     property alias compactClockTextSize: idleSettings.compactClockTextSize
@@ -195,6 +196,7 @@ QtObject {
             property int displayOffTimeout: 21
             property int lockTimeout: 26
             property string clockTextColor: "#e2e8f0"
+            property string dateTextColor: "#94a3b8"
             property string localWeatherLocation: "Jakarta"
             property string iconTheme: "Suru++"
             property int clockTextSize: 96
@@ -243,10 +245,12 @@ QtObject {
         onLoaded: {
             service.bluetoothSettingsReady = true
             service.attemptStartupBluetoothReconnect()
+            service.refreshBluetooth()
         }
         onLoadFailed: function(error) {
             service.bluetoothSettingsReady = true
             service.attemptStartupBluetoothReconnect()
+            service.refreshBluetooth()
         }
         onAdapterUpdated: {
             if (service.bluetoothSettingsReady) writeAdapter()
@@ -906,12 +910,12 @@ QtObject {
                 }
                 service.bluetoothDevices = devices
                 service.bluetoothConnected = devices.some(function(device) { return device.connected })
-                if (output.indexOf("Waiting to connect to bluetoothd") !== -1)
-                    service.bluetoothMessage = "Bluetooth service is inactive"
-                else if (/No default controller/i.test(output))
+                if (/No default controller/i.test(output))
                     service.bluetoothMessage = "No Bluetooth adapter found"
                 else if (service.bluetoothDaemonReady)
                     service.bluetoothMessage = ""
+                else if (output.indexOf("Waiting to connect to bluetoothd") !== -1)
+                    service.bluetoothMessage = "Bluetooth service is inactive"
             }
         }
         onExited: function(exitCode, exitStatus) {
@@ -966,15 +970,32 @@ QtObject {
         }
         onExited: function(exitCode, exitStatus) {
             var repairAddress = service.bluetoothRepairAddress
+            var pairAddress = service.bluetoothConnectAfterPairAddress
+            var commandOutput = String(service.bluetoothCommandOutput || "")
             service.bluetoothRepairAddress = ""
             if (repairAddress) {
                 if (exitCode === 0) {
                     Qt.callLater(function() {
+                        if (service.bluetoothCommandProcess.running) {
+                            service.bluetoothConnectAfterPairAddress = ""
+                            service.bluetoothMessage = "A Bluetooth command is already running"
+                            return
+                        }
                         service.runBluetoothCommand(["pair", repairAddress], "Pairing again with " + repairAddress + "…")
                     })
                     return
                 }
+                service.bluetoothConnectAfterPairAddress = ""
                 service.bluetoothMessage = "Could not remove the existing pairing"
+            }
+            if (pairAddress) {
+                service.bluetoothConnectAfterPairAddress = ""
+                if (exitCode === 0 && !/failed|error|not available|not ready/i.test(commandOutput)) {
+                    Qt.callLater(function() {
+                        service.connectBluetooth(pairAddress)
+                    })
+                    return
+                }
             }
             if (exitCode === 124)
                 service.bluetoothMessage = "Bluetooth command timed out"
@@ -1468,6 +1489,11 @@ QtObject {
     }
 
     function pairBluetooth(address) {
+        if (bluetoothCommandProcess.running) {
+            bluetoothMessage = "A Bluetooth command is already running"
+            return
+        }
+        bluetoothConnectAfterPairAddress = String(address || "").trim().toUpperCase()
         runBluetoothCommand(["pair", address], "Pairing with " + address + "…");
     }
 
@@ -1477,6 +1503,7 @@ QtObject {
             return
         }
         bluetoothRepairAddress = address
+        bluetoothConnectAfterPairAddress = String(address || "").trim().toUpperCase()
         runBluetoothCommand(["remove", address], "Removing old pairing before repair…")
     }
 

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Services.Notifications
 
 PanelWindow {
     id: root
@@ -19,6 +20,34 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-notifications"
     exclusionMode: ExclusionMode.Ignore
 
+    function urgencyColor(item) {
+        if (item.urgency === NotificationUrgency.Critical) return "#d79aa6"
+        if (item.urgency === NotificationUrgency.Low) return "#91b99e"
+        return "#a2b0d1"
+    }
+
+    function urgencyTitleColor(item) {
+        if (item.urgency === NotificationUrgency.Critical) return "#f0cbd3"
+        if (item.urgency === NotificationUrgency.Low) return "#cde7d6"
+        return "#d8def0"
+    }
+
+    function urgencyBodyColor(item) {
+        if (item.urgency === NotificationUrgency.Critical) return "#e2c3cb"
+        if (item.urgency === NotificationUrgency.Low) return "#bcd9c8"
+        return "#c5cfe2"
+    }
+
+    function urgencyBackground(item, hovered) {
+        var hex = item.urgency === NotificationUrgency.Critical
+            ? (hovered ? "#5a3945" : "#4a303a")
+            : (item.urgency === NotificationUrgency.Low
+                ? (hovered ? "#374f43" : "#2c4138")
+                : (hovered ? "#3a455c" : "#30384b"))
+        var tint = Qt.color(hex)
+        return Qt.rgba(tint.r, tint.g, tint.b, 0.69)
+    }
+
     Column {
         anchors.fill: parent
         anchors.margins: 4
@@ -32,16 +61,16 @@ PanelWindow {
                 width: root.width - 8
                 height: 96
                 radius: 14
-                color: "#111722"
-                border.color: "#8da9d6"
+                color: root.urgencyBackground(modelData, cardMouse.containsMouse)
+                border.color: root.urgencyColor(modelData)
                 border.width: 1
 
                 GlowBorder {
                     targetItem: toastCard
                     cornerRadius: toastCard.radius
                     spread: 3
-                    glowColor: "#8da9d6"
-                    accentGlowColor: "#8da9d6"
+                    glowColor: root.urgencyColor(modelData)
+                    accentGlowColor: root.urgencyColor(modelData)
                 }
 
                 Timer {
@@ -72,7 +101,7 @@ PanelWindow {
                         Text {
                             Layout.fillWidth: true
                             text: modelData.appName + (modelData.summary ? " · " + modelData.summary : "")
-                            color: "#c0c0d8"
+                            color: root.urgencyTitleColor(modelData)
                             font.family: "JetBrainsMono Nerd Font Mono"
                             font.pixelSize: 12
                             font.bold: true
@@ -82,7 +111,7 @@ PanelWindow {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             text: modelData.body
-                            color: "#e2e8f0"
+                            color: root.urgencyBodyColor(modelData)
                             font.family: "JetBrainsMono Nerd Font Mono"
                             font.pixelSize: 11
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -97,8 +126,13 @@ PanelWindow {
                         implicitWidth: 23
                         implicitHeight: 23
                         radius: 6
-                        color: dismissMouse.containsMouse ? "#34445f" : "transparent"
-                        Text { anchors.centerIn: parent; text: "×"; color: "#c0c0d8"; font.pixelSize: 17 }
+                        color: dismissMouse.containsMouse ? root.urgencyColor(modelData) : "transparent"
+                        Text {
+                            anchors.centerIn: parent
+                            text: "×"
+                            color: root.urgencyTitleColor(modelData)
+                            font.pixelSize: 17
+                        }
                         MouseArea {
                             id: dismissMouse
                             anchors.fill: parent

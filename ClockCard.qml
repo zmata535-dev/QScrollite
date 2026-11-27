@@ -32,6 +32,11 @@ PanelWindow {
     property int fractureSeed: 1
     readonly property real closeFade: Math.max(fractureProgress, slideCloseProgress)
     readonly property string dateLabel: Qt.formatDate(now, "dddd, dd MMM yyyy")
+    function outlineColor(textColor) {
+        var color = Qt.color(String(textColor || "#e2e8f0"))
+        var luminance = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+        return luminance > 0.5 ? "#b8000000" : "#b8ffffff"
+    }
     property string focusAtOpen: String(service.activeWindowId || "")
     readonly property bool otherComponentOpen: service.open || service.gDictCalcOpen || service.qSysMonOpen
         || service.qNoteOpen || service.clipboardOpen
@@ -170,7 +175,7 @@ PanelWindow {
                         text: Qt.formatDateTime(root.now, "HH")
                         color: root.service.idleClockTextColor
                         style: Text.Outline
-                        styleColor: "#b8000000"
+                        styleColor: root.outlineColor(root.service.idleClockTextColor)
 font.pixelSize: root.service.idleClockTextSize
 horizontalAlignment: Text.AlignRight
                         verticalAlignment: Text.AlignVCenter
@@ -180,7 +185,7 @@ horizontalAlignment: Text.AlignRight
                         text: ":"
                         color: root.service.idleClockTextColor
                         style: Text.Outline
-                        styleColor: "#b8000000"
+                        styleColor: root.outlineColor(root.service.idleClockTextColor)
                         opacity: root.colonVisible ? 1 : 0.18
 font.pixelSize: root.service.idleClockTextSize * 0.92
 horizontalAlignment: Text.AlignHCenter
@@ -191,7 +196,7 @@ horizontalAlignment: Text.AlignHCenter
                         text: Qt.formatDateTime(root.now, "mm")
                         color: root.service.idleClockTextColor
                         style: Text.Outline
-                        styleColor: "#b8000000"
+                        styleColor: root.outlineColor(root.service.idleClockTextColor)
 font.pixelSize: root.service.idleClockTextSize
 horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
@@ -206,9 +211,9 @@ horizontalAlignment: Text.AlignLeft
                     Text {
                         Layout.fillWidth: true
                         text: root.dateLabel
-                        color: "#94a3b8"
+                        color: root.service.idleDateTextColor
                         style: Text.Outline
-                        styleColor: "#b8000000"
+                        styleColor: root.outlineColor(root.service.idleDateTextColor)
                         font.family: "JetBrainsMono Nerd Font Mono"
                         font.weight: Font.Light
                         font.pixelSize: 17

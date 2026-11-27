@@ -83,8 +83,8 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.min(580, root.width - 32)
-            height: Math.min(560, root.height - 32)
+            width: Math.min(500, root.width - 32)
+            height: Math.min(480, root.height - 32)
             x: root.cardX
             y: (parent.height - height) / 2
             radius: 14
@@ -97,8 +97,8 @@ PanelWindow {
             ColumnLayout {
                 z: 1
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 10
+                anchors.margins: 12
+                spacing: 7
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -107,18 +107,18 @@ PanelWindow {
                         text: "Bluetooth"
                         color: "#e2e8f0"
                         font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 16
+                        font.pixelSize: 15
                     }
                     ShellButton {
                         visible: !root.service.bluetoothDaemonReady
                             && root.service.bluetoothMessage !== "No Bluetooth adapter found"
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                         text: "Start service"
                         enabled: !root.service.bluetoothServiceStartProcess.running
                         onClicked: root.service.startBluetoothService(false)
                     }
                     ShellButton {
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                         text: root.service.bluetoothPowered ? "Power off" : "Power on"
                         onClicked: root.service.setBluetoothPower(!root.service.bluetoothPowered)
                     }
@@ -133,7 +133,7 @@ PanelWindow {
                             text: "✕"
                             color: closeMouse.containsMouse ? "#ffb3ba" : "#8092ab"
                             font.family: "JetBrainsMono Nerd Font Mono"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                         }
                         MouseArea {
                             id: closeMouse
@@ -152,17 +152,17 @@ PanelWindow {
                         text: root.service.bluetoothScanning ? "Scanning for nearby devices…" : "Nearby and known devices"
                         color: "#94a3b8"
                         font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                     }
                     ShellButton {
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                         text: root.service.bluetoothScanning ? "Scanning…" : "Scan"
                         enabled: root.service.bluetoothDaemonReady && root.service.bluetoothPowered
                             && !root.service.bluetoothScanning
                         onClicked: root.service.scanBluetooth()
                     }
                     ShellButton {
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                         text: "Refresh"
                         enabled: !root.service.bluetoothRefreshProcess.running
                         onClicked: root.service.refreshBluetooth()
@@ -177,7 +177,7 @@ PanelWindow {
                     text: root.service.bluetoothMessage
                     color: "#abc7ff"
                     font.family: "JetBrainsMono Nerd Font Mono"
-                    font.pixelSize: 10
+                    font.pixelSize: 9
                     wrapMode: Text.Wrap
                 }
 
@@ -202,7 +202,7 @@ PanelWindow {
                                 delegate: Rectangle {
                                     required property var modelData
                                     width: deviceColumn.width
-                                    height: 58
+                                    height: 50
                                     radius: 8
                                     color: "#151e2c"
                                     border.color: "#2b364a"
@@ -222,7 +222,7 @@ PanelWindow {
                                                 text: modelData.name
                                                 color: "#dce5f2"
                                                 font.family: "JetBrainsMono Nerd Font Mono"
-                                                font.pixelSize: 11
+                                                font.pixelSize: 10
                                                 elide: Text.ElideRight
                                             }
                                             Text {
@@ -230,12 +230,12 @@ PanelWindow {
                                                 text: modelData.address
                                                 color: "#8092ab"
                                                 font.family: "JetBrainsMono Nerd Font Mono"
-                                                font.pixelSize: 9
+                                                font.pixelSize: 8
                                             }
                                         }
 
                                         ShellButton {
-                                            font.pixelSize: 9
+                                            font.pixelSize: 8
                                             text: modelData.paired ? "Repair" : "Pair"
                                             enabled: root.service.bluetoothDaemonReady && root.service.bluetoothPowered
                                             onClicked: modelData.paired
@@ -243,16 +243,12 @@ PanelWindow {
                                                 : root.service.pairBluetooth(modelData.address)
                                         }
                                         ShellButton {
-                                            font.pixelSize: 9
-                                            text: "Connect"
+                                            font.pixelSize: 8
+                                            text: modelData.connected ? "Disconnect" : "Connect"
                                             enabled: root.service.bluetoothDaemonReady && root.service.bluetoothPowered
-                                            onClicked: root.service.connectBluetooth(modelData.address)
-                                        }
-                                        ShellButton {
-                                            font.pixelSize: 9
-                                            text: "Disconnect"
-                                            enabled: root.service.bluetoothDaemonReady && root.service.bluetoothPowered
-                                            onClicked: root.service.disconnectBluetooth(modelData.address)
+                                            onClicked: modelData.connected
+                                                ? root.service.disconnectBluetooth(modelData.address)
+                                                : root.service.connectBluetooth(modelData.address)
                                         }
                                     }
                                 }
@@ -269,7 +265,7 @@ PanelWindow {
                         wrapMode: Text.Wrap
                         color: "#8092ab"
                         font.family: "JetBrainsMono Nerd Font Mono"
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                     }
                 }
 
@@ -278,7 +274,7 @@ PanelWindow {
                     text: "Pair first, then connect. Some devices may ask for confirmation."
                     color: "#64748b"
                     font.family: "JetBrainsMono Nerd Font Mono"
-                    font.pixelSize: 9
+                    font.pixelSize: 8
                     wrapMode: Text.Wrap
                 }
             }

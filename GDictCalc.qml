@@ -36,6 +36,7 @@ PanelWindow {
     property real openTargetX: 12
     property string focusAtOpen: ""
     property bool openingScheduled: false
+    property bool focusSearchBoxOnPointerHover: false
     property var focusedInput: null
     readonly property real widthScale: 0.7
     readonly property bool comboPopupOpen:
@@ -71,7 +72,6 @@ PanelWindow {
         if (!visible || slideIn.running || openingScheduled) return
         openingScheduled = true
         if (dictionaryMode) releaseKeyboardFocus()
-        else focusSearchBox()
         focusAtOpen = String(service.activeWindowId || "")
         Qt.callLater(function() {
             root.openingScheduled = false
@@ -82,6 +82,23 @@ PanelWindow {
         })
     }
 
+    function movePointerToSearchBox() {
+        if (!root.visible || !calcField.visible || root.service.activeCompositor !== "hyprland") return
+        var point = calcField.mapToGlobal(calcField.width / 2, calcField.height / 2)
+        Quickshell.execDetached([
+            "hyprctl", "eval",
+            "hl.dispatch(hl.dsp.cursor.move({ x = " + Math.round(point.x)
+                + ", y = " + Math.round(point.y) + " }))"
+        ])
+        focusSearchBoxOnPointerHover = true
+        Qt.callLater(function() {
+            if (root.visible && root.focusSearchBoxOnPointerHover && cardHover.hovered) {
+                root.focusSearchBoxOnPointerHover = false
+                root.focusSearchBox()
+            }
+        })
+    }
+
     NumberAnimation {
         id: slideIn
         target: root
@@ -89,6 +106,14 @@ PanelWindow {
         to: root.openTargetX
         duration: 300
         easing.type: Easing.OutCubic
+        onFinished: pointerToSearchBoxTimer.restart()
+    }
+
+    Timer {
+        id: pointerToSearchBoxTimer
+        interval: 80
+        repeat: false
+        onTriggered: root.movePointerToSearchBox()
     }
 
     NumberAnimation {
@@ -196,6 +221,50 @@ PanelWindow {
             "Bengali": "bn", "Malay": "ms", "Filipino": "tl"
         }
         return codes[language] || "en"
+    }
+    function hasTwoUniversalUnits(value) {
+        var units = [
+            { id: "USD", names: ["USD", "US dollar", "US dollars", "dollar", "dollars"] },
+            { id: "EUR", names: ["EUR", "euro", "euros"] },
+            { id: "GBP", names: ["GBP", "pound sterling"] },
+            { id: "JPY", names: ["JPY", "yen"] },
+            { id: "IDR", names: ["IDR", "rupiah"] },
+            { id: "meter", names: ["m", "meter", "meters", "metre", "metres"] },
+            { id: "kilometer", names: ["km", "kilometer", "kilometers", "kilometre", "kilometres"] },
+            { id: "mile", names: ["mi", "mile", "miles"] },
+            { id: "foot", names: ["ft", "foot", "feet"] },
+            { id: "inch", names: ["in", "inch", "inches"] },
+            { id: "kilogram", names: ["kg", "kilogram", "kilograms"] },
+            { id: "gram", names: ["g", "gram", "grams"] },
+            { id: "pound", names: ["lb", "lbs", "pound", "pounds"] },
+            { id: "ounce", names: ["oz", "ounce", "ounces"] },
+            { id: "byte", names: ["B", "byte", "bytes"] },
+            { id: "kilobyte", names: ["KB", "kilobyte", "kilobytes"] },
+            { id: "megabyte", names: ["MB", "megabyte", "megabytes"] },
+            { id: "gigabyte", names: ["GB", "gigabyte", "gigabytes"] },
+            { id: "terabyte", names: ["TB", "terabyte", "terabytes"] },
+            { id: "bit", names: ["bit", "bits"] },
+            { id: "kilobit", names: ["Kbit", "kilobit", "kilobits"] },
+            { id: "megabit", names: ["Mbit", "megabit", "megabits"] },
+            { id: "gigabit", names: ["Gbit", "gigabit", "gigabits"] }
+        ]
+        var text = String(value || "")
+        var found = {}
+        var count = 0
+        for (var i = 0; i < units.length; i++) {
+            for (var j = 0; j < units[i].names.length; j++) {
+                var escaped = units[i].names[j].replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+                var pattern = new RegExp("(^|[^A-Za-z0-9])" + escaped + "(?=$|[^A-Za-z0-9])", "i")
+                if (pattern.test(text)) {
+                    if (!found[units[i].id]) {
+                        found[units[i].id] = true
+                        count++
+                    }
+                    break
+                }
+            }
+        }
+        return count >= 2
     }
     readonly property var targetOptions: {
         switch (convertCategory.currentIndex) {
@@ -640,7 +709,12 @@ PanelWindow {
             HoverHandler {
                 id: cardHover
                 onHoveredChanged: {
-                    if (!hovered && !root.comboPopupOpen) root.releaseKeyboardFocus()
+                    if (hovered && root.focusSearchBoxOnPointerHover) {
+                        root.focusSearchBoxOnPointerHover = false
+                        root.focusSearchBox()
+                    } else if (!hovered && !root.comboPopupOpen) {
+                        root.releaseKeyboardFocus()
+                    }
                 }
             }
 
@@ -836,6 +910,7 @@ PanelWindow {
                         Layout.fillWidth: true
                         spacing: 8 * root.widthScale
                         ShellButton {
+                            id: translateButton
                             focusPolicy: Qt.NoFocus
                             Layout.fillWidth: true
                             implicitHeight: 25
@@ -860,6 +935,11 @@ PanelWindow {
                             accent: true
                             darkBorder: true
                             onClicked: root.searchGoogle("translate")
+                            ShellToolTip {
+                                parent: translateButton
+                                visible: translateButton.hovered
+                                text: "English to English shows a definition."
+                            }
                         }
                         ShellButton {
                             focusPolicy: Qt.NoFocus
@@ -869,7 +949,7 @@ PanelWindow {
                             text: "Co̲nvert"
                             leftPadding: 3
                             rightPadding: 3
-                            enabled: root.expression.trim().length > 0
+                            enabled: root.hasTwoUniversalUnits(root.expression)
                             accent: true
                             darkBorder: true
                             onClicked: root.searchGoogle("convert")

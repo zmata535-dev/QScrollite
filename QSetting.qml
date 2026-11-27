@@ -228,7 +228,7 @@ horizontalAlignment: Text.AlignLeft
                 Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
                     Layout.bottomMargin: 14
                     text: Qt.formatDate(root.clockPreviewNow, "dddd, dd MMM yyyy")
-                    color: "#94a3b8"
+                    color: root.service.idleDateTextColor
 font.pixelSize: 17
                     horizontalAlignment: Text.AlignHCenter
                 }
@@ -591,7 +591,7 @@ font.pixelSize: 17
                     spacing: 6
 
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light
-                        text: "Clock text color"
+                        text: "Clock color"
                         color: "#dce5f2"
                         font.pixelSize: 10
                     }
@@ -610,7 +610,8 @@ font.pixelSize: 17
 
                         font.pixelSize: 9
                         id: colorField
-                        Layout.preferredWidth: 112
+                        Layout.preferredWidth: 72
+                        Layout.minimumWidth: 60
                         text: root.service.idleClockTextColor
                         placeholderText: "#e2e8f0"
                         maximumLength: 7
@@ -623,7 +624,40 @@ font.pixelSize: 17
                         }
                     }
                     Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light
-                        text: "Size"
+                        text: "Date color"
+                        color: "#dce5f2"
+                        font.pixelSize: 10
+                    }
+                    Rectangle {
+                        width: 20
+                        height: 20
+                        radius: 6
+                        color: root.service.idleDateTextColor
+                        border.color: "#64748b"
+                    }
+                    ShellTextField {
+                        implicitHeight: 20
+                        font.pixelSize: 9
+                        id: dateColorField
+                        Layout.preferredWidth: 72
+                        Layout.minimumWidth: 60
+                        text: root.service.idleDateTextColor
+                        placeholderText: "#94a3b8"
+                        maximumLength: 7
+                        onEditingFinished: {
+                            if (/^#[0-9a-fA-F]{6}$/.test(text)) {
+                                root.service.idleDateTextColor = text
+                            } else {
+                                text = root.service.idleDateTextColor
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; Layout.fillWidth: true
+                        text: "Clock size"
                         color: "#dce5f2"
                         font.pixelSize: 10
                     }

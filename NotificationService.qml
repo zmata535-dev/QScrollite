@@ -32,21 +32,27 @@ QtObject {
             appIcon: notification.appIcon || "",
             summary: notification.summary || "",
             body: notification.body || "",
+            urgency: notification.urgency,
             notification: notification
         };
 
         var nextUnread = unread.slice(0);
-        var exists = false;
+        var replaced = false;
         for (var i = 0; i < nextUnread.length; i++) {
-            if (nextUnread[i].id === item.id) { exists = true; break; }
+            if (nextUnread[i].id === item.id) {
+                nextUnread[i] = item;
+                replaced = true;
+                break;
+            }
         }
-        if (!exists) {
+        if (!replaced) {
             nextUnread.push(item);
-            unread = nextUnread;
+            if (nextUnread.length > 200) nextUnread.shift();
         }
+        unread = nextUnread;
 
         if (!doNotDisturb) {
-            var nextToasts = toasts.slice(0);
+            var nextToasts = removeFrom(toasts, item.id);
             nextToasts.push(item);
             toasts = nextToasts;
         }
@@ -85,9 +91,6 @@ QtObject {
     function activate(item) {
         if (!item) return;
         var notification = item.notification;
-        if (switcherService) {
-            switcherService.closeCalendar();
-        }
         markRead(item.id);
         notificationCenterOpen = false;
         var actions = notification ? notification.actions : [];

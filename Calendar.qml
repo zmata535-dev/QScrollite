@@ -25,8 +25,6 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-calendar"
     WlrLayershell.keyboardFocus: root.otherComponentOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
 
-    readonly property bool pairedWithNotifications: service.notificationService
-        ? service.notificationService.notificationCenterOpen : false
     readonly property bool otherComponentOpen: service.open || service.appMenuOpen || service.appMenuPending
         || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen || service.clipboardOpen
         || service.bluetoothOpen || service.idleConfigOpen || service.clockOpen || service.compactClockOpen
@@ -35,17 +33,13 @@ PanelWindow {
         || service.gDictCalcOpen || service.qSysMonOpen || service.qNoteOpen
         || service.clipboardOpen || service.bluetoothOpen || service.idleConfigOpen
         || (service.wallpaperService && service.wallpaperService.selectorOpen)
-    readonly property real pairedCalendarWidth: Math.min(340, (root.width - 48) * 0.36)
-    readonly property real pairedNotificationWidth: Math.min(560, (root.width - 48) * 0.56)
     readonly property real dayCellHeight: Math.max(10, Math.min(30, (root.height - 240) / 6))
-    property var pairedInputRegion: Region { item: card }
-    mask: pairedInputRegion
+    mask: Region { item: card }
     property real cardX: -500
     property real openTargetX: 12
 
     function positionOppositeFocusedWindow() {
-        var totalWidth = pairedWithNotifications
-            ? pairedCalendarWidth + 14 + pairedNotificationWidth : card.width
+        var totalWidth = card.width
         var preferredX = PanelPlacement.oppositeTargetX(service, root.screen.x,
             root.width, totalWidth, 12)
         if (otherSidePanelOpen) {
@@ -54,14 +48,12 @@ PanelWindow {
         } else {
             openTargetX = preferredX
         }
-        service.calendarGroupTargetX = openTargetX
     }
 
     function openFromOppositeSide() {
         positionOppositeFocusedWindow()
         cardX = PanelPlacement.entryX(openTargetX, root.width,
-            pairedWithNotifications ? pairedCalendarWidth + 14 + pairedNotificationWidth : card.width,
-            root.screen.x, 12)
+            card.width, root.screen.x, 12)
         slideIn.to = openTargetX
         slideIn.restart()
     }
@@ -77,8 +69,6 @@ PanelWindow {
     }
 
     onOtherSidePanelOpenChanged: repositionAfterSwitcher()
-    onPairedWithNotificationsChanged: repositionAfterSwitcher()
-
     Connections {
         target: root.service
         function onActiveWindowIdChanged() {
@@ -143,10 +133,7 @@ PanelWindow {
     }
 
     function closeCalendar() {
-        var closePairedCenter = pairedWithNotifications
-        if (!service.closeCalendar()) return
-        if (closePairedCenter && service.notificationService)
-            service.notificationService.closeCenter()
+        service.closeCalendar()
     }
 
     onMonthDateChanged: rebuildDays()
@@ -162,15 +149,14 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: root.pairedWithNotifications || root.otherComponentOpen ? "transparent" : "#35080c16"
+            color: root.otherComponentOpen ? "transparent" : "#35080c16"
         }
 
         GlowBorder { targetItem: card; cornerRadius: card.radius }
 
         Rectangle {
             id: card
-            width: root.pairedWithNotifications
-                ? root.pairedCalendarWidth : Math.min(340, root.width - 32)
+            width: Math.min(340, root.width - 32)
             height: Math.min(calendarColumn.implicitHeight + 24, root.height - 32)
             x: root.cardX
             y: (root.height - height) / 2
