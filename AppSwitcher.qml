@@ -1574,7 +1574,7 @@ RowLayout {
             RowLayout {
                 id: headerRow
                 Layout.fillWidth: true
-                spacing: 0
+                spacing: 3
 
                 // Two-line Clock and Date
                 Item {
@@ -1583,7 +1583,7 @@ RowLayout {
 
                     ColumnLayout {
                         id: clockDisplay
-                        spacing: 1
+                        spacing: -5
 
                         Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;text: Qt.formatDateTime(switcherWindow.now, "HH:mm")
                             color: "#f1f5f9"

@@ -164,7 +164,7 @@ PanelWindow {
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 22
-                spacing: 4
+                spacing: -5
 
                 RowLayout {
                     Layout.fillWidth: true
