@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.js" as PanelPlacement
 
 PanelWindow {
     id: root
@@ -15,6 +16,56 @@ PanelWindow {
     WlrLayershell.layer: service.raisedCardModule === "qtextpicker" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-qtextpicker"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    property real cardX: -700
+    property real openTargetX: 16
+
+    function positionOppositeFocusedWindow() {
+        var targetX = PanelPlacement.oppositeTargetX(service, root.screen.x,
+            root.width, card.width, 16)
+        var margin = Math.min(16, Math.max(0, (root.width - card.width) / 2))
+        openTargetX = Math.max(margin, Math.min(targetX, root.width - card.width - margin))
+    }
+
+    function openFromLeft() {
+        Qt.callLater(function() {
+            if (!root.visible || card.width <= 0 || root.width <= 0) return
+            root.positionOppositeFocusedWindow()
+            root.cardX = PanelPlacement.leftEntryX(root.screen.x, card.width, 16)
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
+    function repositionAfterFocusChange() {
+        Qt.callLater(function() {
+            if (!root.visible || PanelPlacement.switcherActive(root.service)) return
+            root.positionOppositeFocusedWindow()
+            slideIn.stop()
+            slideIn.to = root.openTargetX
+            slideIn.restart()
+        })
+    }
+
+    NumberAnimation {
+        id: slideIn
+        target: root
+        property: "cardX"
+        to: root.openTargetX
+        duration: 300
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: root.service
+        function onActiveWindowIdChanged() { root.repositionAfterFocusChange() }
+        function onOpenChanged() { if (!root.service.open) root.repositionAfterFocusChange() }
+    }
+
+    onVisibleChanged: {
+        if (visible) openFromLeft()
+        else slideIn.stop()
+    }
+    Component.onCompleted: if (visible) openFromLeft()
 
     function close() { service.qTextPickerOpen = false }
 
@@ -22,7 +73,8 @@ PanelWindow {
 
     Rectangle {
         id: card
-        anchors.centerIn: parent
+        x: root.cardX
+        anchors.verticalCenter: parent.verticalCenter
         width: Math.min(640, root.width - 32)
         height: Math.min(560, root.height - 40)
         radius: 14

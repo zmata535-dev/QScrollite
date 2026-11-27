@@ -33,3 +33,7 @@ function entryX(targetX, screenWidth, panelWidth, screenX, margin) {
         ? Number(screenWidth) + gap
         : -Number(panelWidth) - gap
 }
+
+function leftEntryX(screenX, panelWidth, margin) {
+    return Number(screenX || 0) - Number(panelWidth || 0) - Number(margin || 12)
+}

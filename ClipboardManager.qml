@@ -17,10 +17,11 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: service.raisedCardModule === "clipboard" ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.namespace: "quickshell-clipboard-manager"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region { Region { item: card } }
     property real cardX: -600
     property real openTargetX: 12
+    property bool openingScheduled: false
 
     function focusedWindowGeometry() {
         var activeId = String(service.activeWindowId || "")
@@ -64,10 +65,16 @@ PanelWindow {
     }
 
     function openFromOppositeSide() {
-        positionOppositeFocusedWindow()
-        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 12)
-        slideIn.to = openTargetX
-        slideIn.restart()
+        if (!visible || slideIn.running || openingScheduled) return
+        openingScheduled = true
+        Qt.callLater(function() {
+            root.openingScheduled = false
+            if (!root.visible || card.width <= 0 || root.width <= 0) return
+            positionOppositeFocusedWindow()
+            cardX = PanelPlacement.leftEntryX(root.screen.x, card.width, 12)
+            slideIn.to = openTargetX
+            slideIn.restart()
+        })
     }
 
     function repositionAfterSwitcher() {
@@ -101,20 +108,19 @@ PanelWindow {
     onVisibleChanged: {
         if (visible) {
             service.raiseCardModule("clipboard")
-            Qt.callLater(function() {
-                if (root.visible) card.forceActiveFocus()
-            })
-            if (!slideIn.running) openFromOppositeSide()
+            openFromOppositeSide()
         } else {
             slideIn.stop()
         }
     }
 
     Component.onCompleted: {
-        if (visible) {
-            card.forceActiveFocus()
-            if (!slideIn.running) openFromOppositeSide()
-        }
+        if (visible) openFromOppositeSide()
+    }
+
+    onWidthChanged: {
+        if (visible && !slideIn.running && cardX !== openTargetX)
+            openFromOppositeSide()
     }
 
     function close() {
@@ -150,7 +156,7 @@ PanelWindow {
             color: "#111722"
             border.color: "#3b4a63"
             border.width: 1
-            focus: true
+            focus: false
 
             TapHandler {
                 acceptedButtons: Qt.LeftButton

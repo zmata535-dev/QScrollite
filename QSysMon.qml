@@ -39,8 +39,7 @@ PanelWindow {
             root.openingScheduled = false
             if (!root.visible || card.width <= 0 || root.width <= 0) return
             root.positionOppositeFocusedWindow()
-            root.cardX = PanelPlacement.entryX(root.openTargetX,
-                root.width, card.width, root.screen.x, 16)
+            root.cardX = PanelPlacement.leftEntryX(root.screen.x, card.width, 16)
             slideIn.to = root.openTargetX
             slideIn.restart()
         })

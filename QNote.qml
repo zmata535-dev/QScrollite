@@ -278,8 +278,7 @@ PanelWindow {
         Qt.callLater(function() {
             if (!root.visible || root.closing || root.width <= 0 || noteCard.width <= 0) return
             root.positionOppositeFocusedWindow()
-            root.cardX = PanelPlacement.entryX(root.openTargetX,
-                root.width, noteCard.width, root.screen.x, 12)
+            root.cardX = PanelPlacement.leftEntryX(root.screen.x, noteCard.width, 12)
             slideIn.to = root.openTargetX
             slideIn.restart()
         })

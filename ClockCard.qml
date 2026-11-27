@@ -35,7 +35,7 @@ PanelWindow {
     function outlineColor(textColor) {
         var color = Qt.color(String(textColor || "#e2e8f0"))
         var luminance = 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
-        return luminance > 0.5 ? "#b8000000" : "#b8ffffff"
+        return luminance > 0.5 ? "#b0000000" : "#b0ffffff"
     }
     property string focusAtOpen: String(service.activeWindowId || "")
     readonly property bool otherComponentOpen: service.open || service.gDictCalcOpen || service.qSysMonOpen

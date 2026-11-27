@@ -84,6 +84,20 @@ PanelWindow {
         return "Continue"
     }
 
+    function systemActionColor(action) {
+        if (action === "shutdown") return "#ef7180"
+        if (action === "reboot") return "#e6ad58"
+        if (action === "logout") return "#78a9e8"
+        return "#abc7ff"
+    }
+
+    function systemActionBackground(action) {
+        if (action === "shutdown") return "#28191f"
+        if (action === "reboot") return "#292218"
+        if (action === "logout") return "#192332"
+        return "#111722"
+    }
+
     onPendingSystemActionChanged: {
         if (pendingSystemAction.length > 0) {
             switcherLeaveTimer.stop()
@@ -1461,7 +1475,7 @@ RowLayout {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: {}
+            onClicked: switcherWindow.cancelSystemAction()
         }
 
         Rectangle {
@@ -1469,8 +1483,8 @@ RowLayout {
             width: Math.min(360, parent.width - 40)
             height: dialogColumn.implicitHeight + 32
             radius: 12
-            color: "#111722"
-            border.color: "#3b4a63"
+            color: switcherWindow.systemActionBackground(switcherWindow.pendingSystemAction)
+            border.color: switcherWindow.systemActionColor(switcherWindow.pendingSystemAction)
             border.width: 1
 
             MouseArea { anchors.fill: parent; onClicked: {} }
@@ -1484,7 +1498,7 @@ RowLayout {
                 Text {
                     Layout.fillWidth: true
                     text: switcherWindow.systemActionLabel(switcherWindow.pendingSystemAction) + "?"
-                    color: "#f0f2fa"
+                    color: switcherWindow.systemActionColor(switcherWindow.pendingSystemAction)
                     font.family: "JetBrainsMono Nerd Font Mono"
                     font.pixelSize: 16
                     font.weight: Font.DemiBold
@@ -1493,7 +1507,8 @@ RowLayout {
                 Text {
                     Layout.fillWidth: true
                     text: "Are you sure you want to " + switcherWindow.pendingSystemAction + "?"
-                    color: "#aab5c7"
+                    color: Qt.lighter(switcherWindow.systemActionColor(
+                        switcherWindow.pendingSystemAction), 1.2)
                     font.family: "JetBrainsMono Nerd Font Mono"
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
@@ -1505,12 +1520,44 @@ RowLayout {
 
                     ShellButton {
                         text: "Cancel"
+                        background: Rectangle {
+                            radius: 6
+                            color: parent.down ? "#78a832"
+                                : (parent.hovered ? "#a6df4f" : "#91c83e")
+                            border.width: 1
+                            border.color: parent.hovered ? "#c2f77a" : "#79a931"
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#17210b"
+                            font: parent.font
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
                         onClicked: switcherWindow.cancelSystemAction()
                     }
 
                     ShellButton {
                         text: switcherWindow.systemActionLabel(switcherWindow.pendingSystemAction)
                         accent: true
+                        background: Rectangle {
+                            radius: 6
+                            color: Qt.darker(switcherWindow.systemActionColor(
+                                switcherWindow.pendingSystemAction), parent.down ? 1.35
+                                : (parent.hovered ? 1.15 : 1.0))
+                            border.width: 1
+                            border.color: Qt.lighter(switcherWindow.systemActionColor(
+                                switcherWindow.pendingSystemAction), parent.hovered ? 1.25 : 1.05)
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: "#111722"
+                            font: parent.font
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
                         onClicked: switcherWindow.confirmSystemAction()
                     }
                 }

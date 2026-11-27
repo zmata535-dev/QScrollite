@@ -421,6 +421,39 @@ QtObject {
         return Quickshell.iconPath("application-x-executable") || Quickshell.iconPath("window") || "";
     }
 
+    // Keep the Repeater model stable between compositor refreshes. In
+    // particular, title-only updates are common while apps load or report
+    // progress and should not destroy/recreate every clickable app icon.
+    function sameWorkspaceList(currentList, nextList) {
+        if (!currentList || currentList.length !== nextList.length) return false;
+        for (var i = 0; i < nextList.length; i++) {
+            var currentWorkspace = currentList[i];
+            var nextWorkspace = nextList[i];
+            if (String(currentWorkspace.id) !== String(nextWorkspace.id) ||
+                    currentWorkspace.name !== nextWorkspace.name ||
+                    currentWorkspace.windows.length !== nextWorkspace.windows.length)
+                return false;
+            for (var j = 0; j < nextWorkspace.windows.length; j++) {
+                var currentWindow = currentWorkspace.windows[j];
+                var nextWindow = nextWorkspace.windows[j];
+                if (String(currentWindow.id) !== String(nextWindow.id) ||
+                        currentWindow.appId !== nextWindow.appId ||
+                        (!!nextWindow.appId && currentWindow.icon !== nextWindow.icon) ||
+                        String(currentWindow.workspaceId) !== String(nextWindow.workspaceId) ||
+                        currentWindow.workspaceName !== nextWindow.workspaceName ||
+                        currentWindow.floating !== nextWindow.floating ||
+                        currentWindow.focused !== nextWindow.focused)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    function publishWorkspaceList(nextList) {
+        if (!sameWorkspaceList(workspaces, nextList))
+            workspaces = nextList;
+    }
+
     // Process for fetching window list
     property var fetchProcess: Process {
         id: fetchProc
@@ -567,7 +600,7 @@ QtObject {
             return a.id - b.id;
         });
 
-        service.workspaces = wsList;
+        publishWorkspaceList(wsList);
     }
 
     function parseNiri(windowsJson, workspacesJson) {
@@ -656,7 +689,7 @@ QtObject {
             return a.id - b.id;
         });
 
-        service.workspaces = wsList;
+        publishWorkspaceList(wsList);
     }
 
     function refresh() {
@@ -674,7 +707,7 @@ QtObject {
         var updateEvents = [
             "workspace", "workspacev2", "focusedmon", "focusedmonv2",
             "openwindow", "closewindow", "movewindow", "movewindowv2",
-            "activewindow", "activewindowv2", "windowtitle", "windowtitlev2",
+            "activewindow", "activewindowv2",
             "changefloatingmode", "createworkspace", "createworkspacev2",
             "destroyworkspace", "destroyworkspacev2"
         ];

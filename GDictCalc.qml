@@ -53,7 +53,7 @@ PanelWindow {
 
     function placeOppositeFocusedWindow() {
         updateOpenTarget()
-        cardX = PanelPlacement.entryX(openTargetX, root.width, card.width, root.screen.x, 12)
+        cardX = PanelPlacement.leftEntryX(root.screen.x, card.width, 12)
     }
 
     function repositionForFocusedApp(force) {

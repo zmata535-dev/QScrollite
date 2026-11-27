@@ -144,7 +144,7 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.min(420, root.width > 64 ? root.width - 32 : 420)
+            width: Math.min(315, root.width > 64 ? root.width - 32 : 315)
             height: Math.min(680, root.height > 64 ? root.height - 32 : 680)
             anchors.right: parent.right
             anchors.rightMargin: root.cardRightMargin
