@@ -168,6 +168,11 @@ case "$cmd" in
         ;;
 
     start)
+        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-enabled quickshell.service >/dev/null 2>&1; then
+            systemctl --user start quickshell.service
+            echo "Quickshell started via systemd (quickshell.service)."
+            exit 0
+        fi
         if pgrep -x quickshell >/dev/null 2>&1 || pgrep -x qs >/dev/null 2>&1; then
             running_pids="$({ pgrep -x quickshell || true; pgrep -x qs || true; } | tr '\n' ' ')"
             echo "Quickshell is already running (PID: ${running_pids})"
@@ -186,11 +191,20 @@ case "$cmd" in
 
     stop)
         echo "Stopping quickshell..."
-        killall -q quickshell qs || true
+        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active quickshell.service >/dev/null 2>&1; then
+            systemctl --user stop quickshell.service
+        else
+            killall -q quickshell qs || true
+        fi
         echo "Stopped."
         ;;
 
     restart)
+        if command -v systemctl >/dev/null 2>&1 && systemctl --user is-enabled quickshell.service >/dev/null 2>&1; then
+            systemctl --user restart quickshell.service
+            echo "Quickshell restarted via systemd (quickshell.service)."
+            exit 0
+        fi
         "$0" stop
         sleep 0.5
         "$0" start

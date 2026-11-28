@@ -440,6 +440,7 @@ PanelWindow {
             return
         }
         Qt.callLater(function() {
+            if (!root || !field) return
             if (root.focusedInput === field && !field.activeFocus)
                 root.focusedInput = null
         })
@@ -448,7 +449,7 @@ PanelWindow {
     function focusSearchBox() {
         if (!root.visible || root.dictionaryMode) return
         Qt.callLater(function() {
-            if (!root.visible || root.dictionaryMode) return
+            if (!root || !root.visible || root.dictionaryMode) return
             root.focusedInput = calcField
             calcField.forceActiveFocus()
             calcField.cursorPosition = calcField.text.length
@@ -1067,13 +1068,14 @@ PanelWindow {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 76
                                 radius: 8
-                                color: Qt.color(root.detectedColor)
+                                color: root.colorResult && root.detectedColor ? Qt.color(root.detectedColor) : "transparent"
                                 border.color: "#607089"
                                 border.width: 1
                                 Text {
                                     anchors.centerIn: parent
                                     text: root.detectedColor.toUpperCase()
                                     color: {
+                                        if (!root.colorResult || !root.detectedColor) return "#f5f7fb"
                                         var color = Qt.color(root.detectedColor)
                                         return color && color.valid &&
                                             (color.r * 0.299 + color.g * 0.587 + color.b * 0.114) > 0.55

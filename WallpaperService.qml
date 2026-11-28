@@ -16,16 +16,6 @@ QtObject {
 
     signal selectorClosing()
 
-    property var wallpaperManagerRestartTimer: Timer {
-        interval: 1000
-        repeat: false
-        onTriggered: {
-            if (service.selectorOpen) return
-            var home = (Quickshell.env("HOME") || "").toString()
-            Quickshell.execDetached(["bash", home + "/.config/quickshell/bin/qs-ctl", "restart"])
-        }
-    }
-
     readonly property string intervalLabel: {
         if (slideshowInterval <= 0) return "Off";
         if (slideshowInterval >= 3600) return (slideshowInterval / 3600) + "h";
@@ -132,7 +122,6 @@ QtObject {
     }
 
     function openSelector() {
-        wallpaperManagerRestartTimer.stop()
         selectorOpen = true;
         refreshWallpapers();
     }
@@ -141,7 +130,6 @@ QtObject {
         if (!selectorOpen) return;
         selectorClosing();
         selectorOpen = false;
-        wallpaperManagerRestartTimer.restart();
     }
 
     function refreshWallpapers() {

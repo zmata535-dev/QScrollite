@@ -148,7 +148,7 @@ PanelWindow {
     function activate(row) {
         if (!row) return
         if (row.isCalculation && row.calculation) {
-            Quickshell.execDetached(["bash", "-c", "printf '%s' " + shellQuote(row.calculation.copyText) + " | wl-copy"])
+            Quickshell.execDetached(["bash", "-c", "printf '%s' \"$1\" | wl-copy", "appmenu-copy", row.calculation.copyText])
             closeMenu()
             return
         }

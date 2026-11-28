@@ -44,7 +44,7 @@ ShellRoot {
         enabled: root.wallpaperService.selectorOpen || notifications.notificationCenterOpen ||
             switcherService.open || switcherService.bluetoothOpen || switcherService.appMenuOpen ||
             switcherService.appMenuPending || switcherService.gDictCalcOpen || switcherService.qSysMonOpen ||
-            switcherService.clipboardOpen || switcherService.qTextPickerOpen || switcherService.calendarOpen ||
+            switcherService.qNoteOpen || switcherService.clipboardOpen || switcherService.qTextPickerOpen || switcherService.calendarOpen ||
             switcherService.calendarPending || switcherService.clockOpen || switcherService.compactClockOpen ||
             switcherService.compactClockPending || switcherService.idleConfigOpen
         onActivated: {
@@ -623,13 +623,15 @@ ShellRoot {
 
         function status(): string {
             return JSON.stringify({
-                registered: polkitDialog.agent.isRegistered,
-                active: polkitDialog.agent.isActive
+                registered: polkitAgent.isRegistered,
+                active: polkitAgent.isActive
             }, null, 2);
         }
 
         function cancel(): void {
-            polkitDialog.cancel();
+            if (polkitAgent.flow) {
+                polkitAgent.flow.cancelAuthenticationRequest();
+            }
         }
     }
 
@@ -670,6 +672,10 @@ ShellRoot {
 
         function list(): string {
             return service.wallpapers.join("\n");
+        }
+
+        function rescan(): void {
+            service.refreshWallpapers();
         }
 
         function interval(sec: string): void {

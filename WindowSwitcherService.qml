@@ -1205,7 +1205,8 @@ QtObject {
         if (activeCompositor === "niri") {
             Quickshell.execDetached(["niri", "msg", "action", "close-window", "--id", id]);
         } else {
-            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.window.close({ window = \"address:" + id + "\" })"]);
+            var escapedId = id.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.window.close({ window = \"address:" + escapedId + "\" })"]);
         }
     }
 

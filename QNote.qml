@@ -612,23 +612,24 @@ PanelWindow {
                         anchors.fill: parent
                         spacing: 0
 
-                        RowLayout {
+                        Item {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 24
-                            spacing: 0
 
                             ShellTextField {
                                 id: noteTitle
+                                anchors.fill: parent
+                                z: 0
                                 TapHandler {
                                     acceptedButtons: Qt.LeftButton
                                     onPressedChanged: {
                                         if (pressed) root.service.raiseCardModule("qnote")
                                     }
                                 }
-                                Layout.fillWidth: true
                                 implicitHeight: 23
                                 leftPadding: 4
-                                rightPadding: 3
+                                rightPadding: 4
+                                horizontalAlignment: Text.AlignLeft
                                 font.pixelSize: 10
                                 placeholderText: "Note title"
                                 text: noteItemCard.modelData.title || ""
@@ -651,7 +652,15 @@ PanelWindow {
                                 onTextChanged: root.updateNoteField(noteItemCard.index, "title", text)
                             }
 
-                            ShellButton {
+                            RowLayout {
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                spacing: 0
+                                z: 1
+                                visible: noteItemCard.noteControlsVisible
+
+                                ShellButton {
                                 id: noteColorButton
                                 Layout.preferredWidth: 76
                                 implicitWidth: 76
@@ -810,6 +819,7 @@ PanelWindow {
                                     root.openPresetMenuIndex = -1
                                     root.deleteNote(noteItemCard.index)
                                 }
+                            }
                             }
                         }
 

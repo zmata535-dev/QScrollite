@@ -656,50 +656,48 @@ font.pixelSize: 17
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; Layout.fillWidth: true
-                        text: "Clock size"
-                        color: "#dce5f2"
-                        font.pixelSize: 10
-                    }
-                    ShellSpinBox {
-                        implicitHeight: 20
-                        font.pixelSize: 9
-                        Layout.preferredWidth: 70
-                        from: 32; to: 160; editable: true
-                        value: root.service.idleClockTextSize
-                        onValueModified: root.service.idleClockTextSize = value
-                    }
-                }
+                    spacing: 6
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
-                        text: "Compact clock font size"
-                        color: "#dce5f2"
-                        font.pixelSize: 10
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 3
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Clock size"; color: "#dce5f2"; font.pixelSize: 10 }
+                        ShellSpinBox {
+                            implicitHeight: 20
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                            from: 32; to: 160; editable: true
+                            value: root.service.idleClockTextSize
+                            onValueModified: root.service.idleClockTextSize = value
+                        }
                     }
-                    ShellSpinBox {
-                        implicitHeight: 20
-                        font.pixelSize: 9
-                        from: 12; to: 72; editable: true
-                        value: root.service.compactClockTextSize
-                        onValueModified: root.service.compactClockTextSize = value
-                    }
-                }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light;Layout.fillWidth: true
-                        text: "Card background opacity (%)"
-                        color: "#dce5f2"
-                        font.pixelSize: 10
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 3
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Compact size"; color: "#dce5f2"; font.pixelSize: 10 }
+                        ShellSpinBox {
+                            implicitHeight: 20
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                            from: 12; to: 72; editable: true
+                            value: root.service.compactClockTextSize
+                            onValueModified: root.service.compactClockTextSize = value
+                        }
                     }
-                    ShellSpinBox {
-                        implicitHeight: 20
-                        font.pixelSize: 9
-                        from: 0; to: 100; editable: true
-                        value: root.service.clockCardBackgroundOpacity
-                        onValueModified: root.service.clockCardBackgroundOpacity = value
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 3
+                        Text { font.family: "JetBrainsMono Nerd Font Mono"; font.weight: Font.Light; text: "Opacity (%)"; color: "#dce5f2"; font.pixelSize: 10 }
+                        ShellSpinBox {
+                            implicitHeight: 20
+                            font.pixelSize: 9
+                            Layout.fillWidth: true
+                            from: 0; to: 100; editable: true
+                            value: root.service.clockCardBackgroundOpacity
+                            onValueModified: root.service.clockCardBackgroundOpacity = value
+                        }
                     }
                 }
 

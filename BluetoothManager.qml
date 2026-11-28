@@ -83,7 +83,7 @@ PanelWindow {
 
         Rectangle {
             id: card
-            width: Math.min(500, root.width - 32)
+            width: Math.min(375, root.width - 32)
             height: Math.min(480, root.height - 32)
             x: root.cardX
             y: (parent.height - height) / 2
