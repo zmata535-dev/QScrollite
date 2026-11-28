@@ -8,6 +8,7 @@ ShellRoot {
     id: root
 
     property var wallpaperService: service
+    property bool switcherIntroActive: true
 
     function ensureHypridleForQuickShellIdleCallbacks() {
         var signature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE");
@@ -134,6 +135,15 @@ ShellRoot {
 
         AppSwitcher {
             service: switcherService
+        }
+    }
+
+    LazyLoader {
+        active: root.switcherIntroActive
+
+        AppSwitcherIntro {
+            onHandoff: switcherService.openSwitcher()
+            onFinished: root.switcherIntroActive = false
         }
     }
 
@@ -432,6 +442,10 @@ ShellRoot {
 
         function refresh(): void {
             switcherService.refresh();
+        }
+
+        function intro(): void {
+            root.switcherIntroActive = true;
         }
 
     }

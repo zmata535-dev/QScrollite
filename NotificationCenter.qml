@@ -47,21 +47,21 @@ PanelWindow {
 
     function urgencyColor(item) {
         if (!item) return "#a2b0d1"
-        if (item.urgency === NotificationUrgency.Critical) return "#d79aa6"
+        if (item.urgency === NotificationUrgency.Critical) return "#b91c1c"
         if (item.urgency === NotificationUrgency.Low) return "#91b99e"
         return "#a2b0d1"
     }
 
     function urgencyTitleColor(item) {
         if (!item) return "#d8def0"
-        if (item.urgency === NotificationUrgency.Critical) return "#f0cbd3"
+        if (item.urgency === NotificationUrgency.Critical) return "#fecaca"
         if (item.urgency === NotificationUrgency.Low) return "#cde7d6"
         return "#d8def0"
     }
 
     function urgencyBodyColor(item) {
         if (!item) return "#c5cfe2"
-        if (item.urgency === NotificationUrgency.Critical) return "#e2c3cb"
+        if (item.urgency === NotificationUrgency.Critical) return "#fca5a5"
         if (item.urgency === NotificationUrgency.Low) return "#bcd9c8"
         return "#c5cfe2"
     }
@@ -69,7 +69,7 @@ PanelWindow {
     function urgencyBackground(item, hovered) {
         if (!item) return Qt.rgba(0.2, 0.25, 0.35, 0.69)
         var hex = item.urgency === NotificationUrgency.Critical
-            ? (hovered ? "#5a3945" : "#4a303a")
+            ? (hovered ? "#5c1010" : "#450a0a")
             : (item.urgency === NotificationUrgency.Low
                 ? (hovered ? "#374f43" : "#2c4138")
                 : (hovered ? "#3a455c" : "#30384b"))
